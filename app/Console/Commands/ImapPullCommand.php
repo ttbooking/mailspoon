@@ -38,7 +38,7 @@ class ImapPullCommand extends Command
 
         $this->events['message'] = $client->getDefaultEvents('message');
 
-        $messages = $client->getFolder('INBOX')->messages()->new()->get();
+        $messages = $client->getFolder('INBOX')->messages()->unseen()->markAsRead()->get();
 
         foreach ($messages as $message) {
             $this->onNewMessage($message);
