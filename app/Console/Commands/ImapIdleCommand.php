@@ -22,6 +22,8 @@ class ImapIdleCommand extends BaseImapIdleCommand
     {
         $this->account = $this->argument('account') ?? config('imap.default');
 
+        $this->call('imap:pull', ['account' => $this->account]);
+
         return parent::handle();
     }
 }
