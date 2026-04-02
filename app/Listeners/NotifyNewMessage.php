@@ -29,5 +29,7 @@ class NotifyNewMessage
             'token' => $token = bin2hex(random_bytes(25)),
             'signature' => hash_hmac('sha256', $timestamp.$token, $this->key),
         ]);
+
+        $event->message->markSeen();
     }
 }
