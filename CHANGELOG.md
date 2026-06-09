@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-06-09
+
 ### Added
 
 - Retention-очистка на базе Eloquent `Prunable`: успешно доставленные записи
