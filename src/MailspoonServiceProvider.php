@@ -21,7 +21,7 @@ class MailspoonServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../config/spoon.php', 'spoon');
+        $this->mergeConfigFrom(__DIR__.'/../config/mailspoon.php', 'mailspoon');
     }
 
     /**
@@ -36,7 +36,7 @@ class MailspoonServiceProvider extends ServiceProvider
 
         if ($this->app->runningInConsole()) {
             $this->publishes([
-                __DIR__.'/../config/spoon.php' => config_path('spoon.php'),
+                __DIR__.'/../config/mailspoon.php' => config_path('mailspoon.php'),
             ], 'mailspoon-config');
 
             $this->publishesMigrations([
@@ -60,14 +60,14 @@ class MailspoonServiceProvider extends ServiceProvider
     {
         // Flush stored messages to the endpoint. Needed in every mode, since
         // reading only stores messages — delivery happens here.
-        if ($cron = config('spoon.schedule.deliver')) {
+        if ($cron = config('mailspoon.schedule.deliver')) {
             $schedule->command('mailspoon:deliver')
                 ->cron($cron)
                 ->withoutOverlapping()
                 ->runInBackground();
         }
 
-        if (config('spoon.retention.days', 0) > 0 && ($cron = config('spoon.schedule.prune'))) {
+        if (config('mailspoon.retention.days', 0) > 0 && ($cron = config('mailspoon.schedule.prune'))) {
             $schedule->command('model:prune', [
                 '--model' => RelayedMessage::class,
             ])
@@ -78,7 +78,7 @@ class MailspoonServiceProvider extends ServiceProvider
 
         // Optional cron-poll mode: pull each configured mailbox instead of
         // running a long-lived mailspoon:sentry watcher.
-        foreach (config('spoon.schedule.pull', []) as $mailbox => $cron) {
+        foreach (config('mailspoon.schedule.pull', []) as $mailbox => $cron) {
             $schedule->command('mailspoon:pull', [$mailbox])
                 ->cron($cron)
                 ->withoutOverlapping()

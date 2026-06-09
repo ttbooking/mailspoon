@@ -30,12 +30,12 @@ JSON в `.env` — рабочий, но хрупкий костыль (пуст�
 
 Превратить репозиторий в composer-пакет `ttbooking/mailspoon`, устанавливаемый
 в любое Laravel-приложение. Пакет шипит дефолтный конфиг, хост-приложение
-публикует и **владеет** своим `config/spoon.php` как обычным PHP — карты,
+публикует и **владеет** своим `config/mailspoon.php` как обычным PHP — карты,
 расписания, замыкания, без сериализации в env.
 
 ## Что это даёт
 
-- **Конфиги первого класса.** `vendor:publish` → `config/spoon.php` принадлежит
+- **Конфиги первого класса.** `vendor:publish` → `config/mailspoon.php` принадлежит
   деплою; `SPOON_PULL_SCHEDULE`-JSON и подобные костыли удаляются.
 - **Версионирование начинает работать на полную.** Теги, CHANGELOG и SemVer уже
   ведутся — composer constraint'ы (`^3.0`) вместо «задеплоили master».
@@ -51,7 +51,7 @@ JSON в `.env` — рабочий, но хрупкий костыль (пуст�
 ```
 mailspoon/
 ├── composer.json            # ttbooking/mailspoon, type: library
-├── config/spoon.php         # дефолты
+├── config/mailspoon.php     # дефолты
 ├── database/migrations/
 ├── src/
 │   ├── MailspoonServiceProvider.php
@@ -71,12 +71,12 @@ mailspoon/
 ```php
 public function register(): void
 {
-    $this->mergeConfigFrom(__DIR__.'/../config/spoon.php', 'spoon');
+    $this->mergeConfigFrom(__DIR__.'/../config/mailspoon.php', 'mailspoon');
 }
 
 public function boot(): void
 {
-    $this->publishes([__DIR__.'/../config/spoon.php' => config_path('spoon.php')], 'mailspoon-config');
+    $this->publishes([__DIR__.'/../config/mailspoon.php' => config_path('mailspoon.php')], 'mailspoon-config');
     $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
 
     // авто-discovery листенеров на пакеты не действует
@@ -144,8 +144,8 @@ Feature-уровня, переезжают почти механически. С
       `app/Console/Commands/*` → `src/Commands/`, `app/Listeners/*` →
       `src/Listeners/`, `app/Models/*` → `src/Models/`, `app/Support/*` →
       `src/Support/`. PSR-4: `"TTBooking\\Mailspoon\\": "src/"`.
-- [x] `config/spoon.php` остаётся в корне пакета; миграция остаётся в
-      `database/migrations/`.
+- [x] `config/spoon.php` остаётся в корне пакета (позже переименован в
+      `config/mailspoon.php`); миграция остаётся в `database/migrations/`.
 - [x] Удалить скелет приложения: `bootstrap/`, `routes/`, `public/`,
       `resources/`, `storage/`, `artisan`, `app/Http`, `app/Providers`,
       остальные `config/*` (включая `config/view.php` — боль хоста, не пакета),
@@ -153,10 +153,13 @@ Feature-уровня, переезжают почти механически. С
 
 ### Этап 2 — MailspoonServiceProvider
 
-- [x] `register()`: `mergeConfigFrom(config/spoon.php, 'spoon')`.
+- [x] `register()`: `mergeConfigFrom(config/mailspoon.php, 'mailspoon')`.
       Помнить: merge верхнеуровневый — published-конфиг хоста должен сохранять
       полную структуру секций (стандартная практика, фиксируем в README).
-- [x] `boot()`: `publishes([... => config_path('spoon.php')], 'mailspoon-config')`;
+- [x] **Переименование конфига `spoon` → `mailspoon`:** файл
+      `config/mailspoon.php`, ключ `config('mailspoon.*')`, атрибуты
+      `#[Config('mailspoon.*')]` — единый нейминг с пакетом и командами.
+- [x] `boot()`: `publishes([... => config_path('mailspoon.php')], 'mailspoon-config')`;
       `loadMigrationsFrom(database/migrations)` +
       `publishesMigrations(...)` (Laravel 13 переписывает даты при публикации);
       `Event::listen(MessageReceived::class, StoreIncomingMessage::class)` —

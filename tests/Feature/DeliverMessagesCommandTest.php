@@ -24,10 +24,10 @@ function pendingMessage(string $raw = 'RAW-MIME-BODY'): RelayedMessage
 beforeEach(function () {
     Storage::fake('local');
     config([
-        'spoon.key' => 'secret-key',
+        'mailspoon.key' => 'secret-key',
         // Keep tests fast: no in-process retry sleeps unless a test opts in.
-        'spoon.delivery.retries' => 1,
-        'spoon.delivery.backoff' => [60, 300, 900],
+        'mailspoon.delivery.retries' => 1,
+        'mailspoon.delivery.backoff' => [60, 300, 900],
     ]);
 });
 
@@ -87,7 +87,7 @@ it('skips a failed message until its back-off window has elapsed', function () {
 });
 
 it('retries a transient failure in-process and delivers within a single run', function () {
-    config(['spoon.delivery.retries' => 3]);
+    config(['mailspoon.delivery.retries' => 3]);
 
     Http::fake(['*' => Http::sequence()
         ->push('unavailable', 503)

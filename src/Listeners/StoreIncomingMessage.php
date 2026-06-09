@@ -23,9 +23,9 @@ use UnexpectedValueException;
 class StoreIncomingMessage
 {
     public function __construct(
-        #[Config('spoon.endpoint')] protected string $endpoint,
-        #[Config('spoon.archive.disk')] protected string $disk,
-        #[Config('spoon.archive.path')] protected string $basePath,
+        #[Config('mailspoon.endpoint')] protected string $endpoint,
+        #[Config('mailspoon.archive.disk')] protected string $disk,
+        #[Config('mailspoon.archive.path')] protected string $basePath,
     ) {}
 
     /**

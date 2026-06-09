@@ -39,7 +39,7 @@ final class RelayedMessage extends Model
      */
     public function prunable(): Builder
     {
-        $days = max(0, (int) config('spoon.retention.days', 0));
+        $days = max(0, (int) config('mailspoon.retention.days', 0));
         $cutoff = now()->subDays($days);
 
         if ($days === 0) {
@@ -115,7 +115,7 @@ final class RelayedMessage extends Model
             return;
         }
 
-        $storage = ArchiveStorage::disk(config('spoon.archive.disk'));
+        $storage = ArchiveStorage::disk(config('mailspoon.archive.disk'));
 
         if ($storage->exists($this->archive_path)) {
             $storage->delete($this->archive_path);

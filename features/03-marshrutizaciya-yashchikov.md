@@ -14,7 +14,7 @@
 
 ## Проблема
 
-`config/spoon.php` задаёт **один** глобальный `endpoint` и `key`:
+`config/mailspoon.php` задаёт **один** глобальный `endpoint` и `key`:
 
 ```php
 'endpoint' => env('SPOON_ENDPOINT'),
@@ -46,16 +46,16 @@ fan-out добавлялся позже без ломающей миграции
   `endpoint` в каждую запись `relayed_messages` — нужно лишь выбирать его по
   ящику вместо глобального конфига. Endpoint фиксируется на момент получения
   письма (аудит: видно, куда письмо было адресовано).
-- **Ключ подписи резолвится при доставке.** `spoon:deliver` сейчас подписывает
-  всё одним `spoon.key`. Ключ **не** хранится в БД (секрет; ротация должна
+- **Ключ подписи резолвится при доставке.** `mailspoon:deliver` сейчас подписывает
+  всё одним `mailspoon.key`. Ключ **не** хранится в БД (секрет; ротация должна
   действовать и на pending-письма) — он выбирается по колонкам
-  `mailbox` + `target` в момент POST'а, с откатом на глобальный `spoon.key`.
+  `mailbox` + `target` в момент POST'а, с откатом на глобальный `mailspoon.key`.
 
 ---
 
 ## Фаза 1: маршрутизация один-к-одному (реализуем)
 
-Карта маршрутов в `config/spoon.php`, ключ — **имя ящика** из `config/imap.php`:
+Карта маршрутов в `config/mailspoon.php`, ключ — **имя ящика** из `config/imap.php`:
 
 ```php
 return [
@@ -83,29 +83,29 @@ return [
 `$folder->mailbox()->config('username')` возвращает IMAP-логин, а не имя из
 `config/imap.php` — ключевать маршруты им нельзя.
 
-Имя ящика знают команды (`imap:pull {mailbox}`, `imap:sentry {mailbox}`) —
+Имя ящика знают команды (`mailspoon:pull {mailbox}`, `mailspoon:sentry {mailbox}`) —
 пробрасываем его в listener через `Context`:
 
 ```php
-// в imap:pull и imap:sentry, до выборки/IDLE
-Context::add('spoon.mailbox', $mailboxName);
+// в mailspoon:pull и mailspoon:sentry, до выборки/IDLE
+Context::add('mailspoon.mailbox', $mailboxName);
 
 // в StoreIncomingMessage
-$name = Context::get('spoon.mailbox');
+$name = Context::get('mailspoon.mailbox');
 
-$endpoint = config("spoon.routes.{$name}.endpoint") ?? $this->endpoint;
+$endpoint = config("mailspoon.routes.{$name}.endpoint") ?? $this->endpoint;
 ```
 
-`imap:sentry` вызывает `imap:watch` in-process (`$this->call()`), поэтому
+`mailspoon:sentry` вызывает `imap:watch` in-process (`$this->call()`), поэтому
 контекст, установленный в sentry, действует и для IDLE-событий.
 
 Колонка `mailbox` начинает хранить имя ящика (а не username, как сейчас).
 IMAP-логин при желании сохраняем отдельно (новая nullable-колонка `account`).
 
-Ключ при доставке (изменение в `spoon:deliver` — одна строка):
+Ключ при доставке (изменение в `mailspoon:deliver` — одна строка):
 
 ```php
-$key = config("spoon.routes.{$message->mailbox}.key") ?? $this->key;
+$key = config("mailspoon.routes.{$message->mailbox}.key") ?? $this->key;
 ```
 
 ### Схема БД: задел под фазу 2
@@ -134,7 +134,7 @@ SPOON_BILLING_KEY=key-...
 
 - [ ] Письмо сохраняется с эндпоинтом, соответствующим его ящику, и
       доставляется на него.
-- [ ] `spoon:deliver` подписывает запрос ключом маршрута; ключи не хранятся в БД.
+- [ ] `mailspoon:deliver` подписывает запрос ключом маршрута; ключи не хранятся в БД.
 - [ ] Откат на глобальный `endpoint/key`, если маршрут не задан (back-compat).
 - [ ] Колонка `mailbox` хранит имя ящика из `config/imap.php`; колонка `target`
       (= `default`) и уникальный индекс `(mailbox, target, fingerprint)`
@@ -173,11 +173,11 @@ SPOON_BILLING_KEY=key-...
 Статусы доставки независимы: CRM может принять письмо, а helpdesk — лежать.
 Listener создаёт **по записи `relayed_messages` на каждый таргет** (одно письмо
 в `support` с двумя таргетами → две записи). Каждая запись живёт своим циклом
-`pending → delivered/failed` со своими ретраями и backoff — `spoon:deliver`
+`pending → delivered/failed` со своими ретраями и backoff — `mailspoon:deliver`
 менять не нужно, он уже обрабатывает записи независимо. Ключ подписи:
 
 ```php
-$key = config("spoon.routes.{$message->mailbox}.{$message->target}.key")
+$key = config("mailspoon.routes.{$message->mailbox}.{$message->target}.key")
     ?? $this->key;
 ```
 
@@ -225,5 +225,5 @@ $shared = self::query()
   а смена endpoint — только на новые письма (старые доедут на прежний адрес).
 - Хорошо сочетается с #04 (фильтрация) — правила можно держать на уровне
   маршрута.
-- Запуск нескольких воркеров: по одному `imap:sentry <mailbox>` на ящик под
+- Запуск нескольких воркеров: по одному `mailspoon:sentry <mailbox>` на ящик под
   supervisor (см. #09) либо cron-poll через `SPOON_PULL_SCHEDULE` (#16).

@@ -50,13 +50,13 @@ class DeliverMessagesCommand extends Command
      * @throws RandomException
      */
     public function handle(
-        #[Config('spoon.key')] string $key,
-        #[Config('spoon.archive.disk')] string $disk,
-        #[Config('spoon.delivery.max_attempts')] int $defaultMaxAttempts,
-        #[Config('spoon.delivery.timeout')] int $timeout,
-        #[Config('spoon.delivery.connect_timeout')] int $connectTimeout,
-        #[Config('spoon.delivery.retries')] int $retries,
-        #[Config('spoon.delivery.backoff')] array $backoff,
+        #[Config('mailspoon.key')] string $key,
+        #[Config('mailspoon.archive.disk')] string $disk,
+        #[Config('mailspoon.delivery.max_attempts')] int $defaultMaxAttempts,
+        #[Config('mailspoon.delivery.timeout')] int $timeout,
+        #[Config('mailspoon.delivery.connect_timeout')] int $connectTimeout,
+        #[Config('mailspoon.delivery.retries')] int $retries,
+        #[Config('mailspoon.delivery.backoff')] array $backoff,
     ): int {
         $this->backoff = $backoff ?: [60];
 

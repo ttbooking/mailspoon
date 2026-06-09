@@ -11,9 +11,9 @@ uses(RefreshDatabase::class);
 beforeEach(function () {
     Storage::fake('local');
     config([
-        'spoon.archive.disk' => 'local',
-        'spoon.delivery.max_attempts' => 3,
-        'spoon.retention.days' => 30,
+        'mailspoon.archive.disk' => 'local',
+        'mailspoon.delivery.max_attempts' => 3,
+        'mailspoon.retention.days' => 30,
     ]);
 });
 
@@ -85,7 +85,7 @@ it('keeps pending, recent and all records when retention is disabled', function 
     expect((new RelayedMessage)->pruneAll())->toBe(0);
     expect(RelayedMessage::count())->toBe(2);
 
-    config(['spoon.retention.days' => 0]);
+    config(['mailspoon.retention.days' => 0]);
 
     expect((new RelayedMessage)->pruneAll())->toBe(0)
         ->and(RelayedMessage::find($pending->id))->not->toBeNull()
