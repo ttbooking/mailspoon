@@ -29,3 +29,4 @@ Thumbs.db
 !/storage/framework/views/
 /storage/framework/views/*
 !/storage/framework/views/.gitignore
+/database/database.sqlite
