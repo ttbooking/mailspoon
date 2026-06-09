@@ -91,7 +91,7 @@ return [
 
         // JSON object: {"default":"*/5 * * * *","secondary":"0 * * * *"}.
         'pull' => json_decode(
-            env('SPOON_PULL_SCHEDULE', '{}'),
+            trim((string) env('SPOON_PULL_SCHEDULE')) ?: '{}',
             flags: JSON_OBJECT_AS_ARRAY | JSON_THROW_ON_ERROR,
         ),
     ],
