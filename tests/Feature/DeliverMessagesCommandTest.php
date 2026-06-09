@@ -23,7 +23,12 @@ function pendingMessage(string $raw = 'RAW-MIME-BODY'): RelayedMessage
 
 beforeEach(function () {
     Storage::fake('local');
-    config(['spoon.key' => 'secret-key']);
+    config([
+        'spoon.key' => 'secret-key',
+        // Keep tests fast: no in-process retry sleeps unless a test opts in.
+        'spoon.delivery.retries' => 1,
+        'spoon.delivery.backoff' => [60, 300, 900],
+    ]);
 });
 
 it('delivers a pending message with a signed payload and marks it delivered', function () {
@@ -49,7 +54,7 @@ it('delivers a pending message with a signed payload and marks it delivered', fu
     });
 });
 
-it('marks a message failed and retries it on the next run when the endpoint errors', function () {
+it('marks a message failed and schedules a back-off before the next run', function () {
     Http::fake(['*' => Http::response('boom', 500)]);
 
     $message = pendingMessage();
@@ -61,7 +66,40 @@ it('marks a message failed and retries it on the next run when the endpoint erro
     expect($message->status)->toBe(RelayedMessage::STATUS_FAILED)
         ->and($message->response_code)->toBe(500)
         ->and($message->attempts)->toBe(1)
-        ->and($message->delivered_at)->toBeNull();
+        ->and($message->delivered_at)->toBeNull()
+        // First failure waits backoff[0] = 60s before becoming deliverable again.
+        ->and($message->next_attempt_at->timestamp)->toEqualWithDelta(now()->addSeconds(60)->timestamp, 5);
+});
+
+it('skips a failed message until its back-off window has elapsed', function () {
+    Http::fake(['*' => Http::response('ok', 200)]);
+
+    $message = pendingMessage();
+    $message->forceFill([
+        'status' => RelayedMessage::STATUS_FAILED,
+        'attempts' => 1,
+        'next_attempt_at' => now()->addMinutes(5),
+    ])->save();
+
+    $this->artisan('spoon:deliver')->expectsOutputToContain('Nothing to deliver.')->assertSuccessful();
+
+    Http::assertNothingSent();
+});
+
+it('retries a transient failure in-process and delivers within a single run', function () {
+    config(['spoon.delivery.retries' => 3]);
+
+    Http::fake(['*' => Http::sequence()
+        ->push('unavailable', 503)
+        ->push('ok', 200),
+    ]);
+
+    $message = pendingMessage();
+
+    $this->artisan('spoon:deliver')->assertSuccessful();
+
+    expect($message->refresh()->status)->toBe(RelayedMessage::STATUS_DELIVERED);
+    Http::assertSentCount(2);
 });
 
 it('stops retrying once the maximum number of attempts is reached', function () {
