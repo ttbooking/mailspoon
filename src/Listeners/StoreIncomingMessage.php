@@ -18,7 +18,7 @@ use UnexpectedValueException;
  * Reading the mailbox is intentionally decoupled from webhook delivery: once
  * the raw message is archived and a delivery record is created, the message is
  * marked as seen so the single-threaded reader is never blocked by a slow or
- * failing endpoint. Actual delivery is handled out-of-band by `spoon:deliver`.
+ * failing endpoint. Actual delivery is handled out-of-band by `mailspoon:deliver`.
  */
 class StoreIncomingMessage
 {

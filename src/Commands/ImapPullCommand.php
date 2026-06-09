@@ -11,7 +11,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Event;
 use Symfony\Component\Console\Attribute\AsCommand;
 
-#[AsCommand(name: 'imap:pull')]
+#[AsCommand(name: 'mailspoon:pull')]
 class ImapPullCommand extends Command
 {
     public const DEFAULT_WITH = ['flags', 'headers', 'body'];
@@ -21,7 +21,7 @@ class ImapPullCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'imap:pull {mailbox} {folder?} {--with=}';
+    protected $signature = 'mailspoon:pull {mailbox} {folder?} {--with=}';
 
     /**
      * The console command description.

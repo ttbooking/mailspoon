@@ -13,7 +13,7 @@ use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
 use TTBooking\Mailspoon\Support\ArchiveStorage;
 
-#[AsCommand(name: 'spoon:deliver')]
+#[AsCommand(name: 'mailspoon:deliver')]
 class DeliverMessagesCommand extends Command
 {
     /**
@@ -21,7 +21,7 @@ class DeliverMessagesCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'spoon:deliver {--limit=50} {--max-attempts=}';
+    protected $signature = 'mailspoon:deliver {--limit=50} {--max-attempts=}';
 
     /**
      * The console command description.

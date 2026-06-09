@@ -153,18 +153,18 @@ Feature-уровня, переезжают почти механически. С
 
 ### Этап 2 — MailspoonServiceProvider
 
-- [ ] `register()`: `mergeConfigFrom(config/spoon.php, 'spoon')`.
+- [x] `register()`: `mergeConfigFrom(config/spoon.php, 'spoon')`.
       Помнить: merge верхнеуровневый — published-конфиг хоста должен сохранять
       полную структуру секций (стандартная практика, фиксируем в README).
-- [ ] `boot()`: `publishes([... => config_path('spoon.php')], 'mailspoon-config')`;
+- [x] `boot()`: `publishes([... => config_path('spoon.php')], 'mailspoon-config')`;
       `loadMigrationsFrom(database/migrations)` +
       `publishesMigrations(...)` (Laravel 13 переписывает даты при публикации);
       `Event::listen(MessageReceived::class, StoreIncomingMessage::class)` —
       авто-discovery листенеров на пакеты не действует.
-- [ ] Консольная часть (`runningInConsole()`): `commands([...3 команды...])` +
+- [x] Консольная часть (`runningInConsole()`): `commands([...3 команды...])` +
       перенос расписания из `bootstrap/app.php` (deliver / prune / pull-карта)
       в `callAfterResolving(Schedule::class, ...)` — логика копируется 1:1.
-- [ ] **Переименовать команды под собственный неймспейс `mailspoon:`** —
+- [x] **Переименовать команды под собственный неймспейс `mailspoon:`** —
       пакет не должен публиковать команды в чужом `imap:*` (он принадлежит
       ImapEngine: `imap:watch` — vendor-команда, наши `imap:pull`/`imap:sentry`
       выглядят как его часть и рискуют коллизией имён):
@@ -172,7 +172,7 @@ Feature-уровня, переезжают почти механически. С
       `spoon:deliver` → `mailspoon:deliver`. Старые имена не сохраняем —
       релиз и так ломающий; внутренний вызов `imap:watch` (vendor) остаётся.
       Обновить имена в расписании провайдера и в выводах/описаниях команд.
-- [ ] Конфиг: ключ `schedule.pull` становится обычным массивом
+- [x] Конфиг: ключ `schedule.pull` становится обычным массивом
       `['default' => '*/5 * * * *']`, `json_decode`/`SPOON_PULL_SCHEDULE`
       удаляются. Скалярные настройки сохраняют `env()`-дефолты — это
       работает и в merged-конфиге без публикации.

@@ -18,7 +18,7 @@ return [
     |
     | Incoming messages are stored to durable storage before they are marked as
     | read, so reading the mailbox is decoupled from webhook delivery. The raw
-    | MIME is written to the disk below and delivered later by `spoon:deliver`.
+    | MIME is written to the disk below, delivered later by `mailspoon:deliver`.
     |
     */
 
@@ -32,7 +32,7 @@ return [
     | Delivery
     |--------------------------------------------------------------------------
     |
-    | `spoon:deliver` posts stored messages to the endpoint. Each attempt has a
+    | `mailspoon:deliver` posts stored messages to the endpoint. Each attempt has a
     | short in-process retry to absorb transient blips (network errors, 5xx,
     | 429). If it still fails, the message is rescheduled using the back-off
     | schedule below — it is only retried on a later run once that delay has
@@ -77,11 +77,12 @@ return [
     | Schedule
     |--------------------------------------------------------------------------
     |
-    | Optional cron schedule, run by `php artisan schedule:run`. `spoon:deliver`
-    | is scheduled by default since stored messages must be flushed in every
-    | mode. The `pull` map lets you poll mailboxes with `imap:pull` instead of
-    | running a long-lived `imap:sentry` watcher; it is empty by default. Set a
-    | cron value to empty to disable a task.
+    | Optional cron schedule, run by `php artisan schedule:run`.
+    | `mailspoon:deliver` is scheduled by default since stored messages must be
+    | flushed in every mode. The `pull` map lets you poll mailboxes with
+    | `mailspoon:pull` instead of running a long-lived `mailspoon:sentry`
+    | watcher; it is empty by default. Set a cron value to empty to disable a
+    | task.
     |
     */
 
@@ -89,11 +90,9 @@ return [
         'deliver' => env('SPOON_DELIVER_CRON', '* * * * *'),
         'prune' => env('SPOON_PRUNE_CRON', '0 3 * * *'),
 
-        // JSON object: {"default":"*/5 * * * *","secondary":"0 * * * *"}.
-        'pull' => json_decode(
-            trim((string) env('SPOON_PULL_SCHEDULE')) ?: '{}',
-            flags: JSON_OBJECT_AS_ARRAY | JSON_THROW_ON_ERROR,
-        ),
+        // Mailbox name => cron expression. Override in the published config,
+        // e.g. 'default' => '*/5 * * * *'.
+        'pull' => [],
     ],
 
 ];
