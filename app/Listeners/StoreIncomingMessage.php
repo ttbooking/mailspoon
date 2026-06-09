@@ -10,6 +10,7 @@ use Illuminate\Container\Attributes\Config;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
+use UnexpectedValueException;
 
 /**
  * Capture an incoming message into durable storage and mark it read.
@@ -35,6 +36,13 @@ class StoreIncomingMessage
         $message = $event->message;
 
         $raw = (string) $message;
+
+        if ($raw === '') {
+            throw new UnexpectedValueException(
+                'Incoming message has empty raw MIME; headers and body must be fetched from IMAP.'
+            );
+        }
+
         $messageId = $message->messageId();
         $fingerprint = $messageId ?: 'sha256:'.hash('sha256', $raw);
 

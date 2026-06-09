@@ -27,17 +27,19 @@ class ImapSentryCommand extends Command
      */
     public function handle(): void
     {
+        $with = implode(',', ImapPullCommand::messageParts($this->option('with')));
+
         $this->call('imap:pull', [
             'mailbox' => $this->argument('mailbox'),
             'folder' => $this->argument('folder'),
-            '--with' => $this->option('with'),
+            '--with' => $with,
         ]);
 
         $this->call('imap:watch', [
             'mailbox' => $this->argument('mailbox'),
             'folder' => $this->argument('folder'),
             '--method' => $this->option('method'),
-            '--with' => $this->option('with'),
+            '--with' => $with,
             '--timeout' => $this->option('timeout'),
             '--attempts' => $this->option('attempts'),
             '--debug' => $this->option('debug'),

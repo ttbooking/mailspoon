@@ -115,3 +115,17 @@ it('stops retrying once the maximum number of attempts is reached', function () 
 
     Http::assertNothingSent();
 });
+
+it('does not deliver an empty archived message', function () {
+    Http::fake();
+
+    $message = pendingMessage(raw: '');
+
+    $this->artisan('spoon:deliver')->assertSuccessful();
+
+    expect($message->refresh()->status)->toBe(RelayedMessage::STATUS_FAILED)
+        ->and($message->attempts)->toBe(1)
+        ->and($message->last_error)->toContain('Archived message is empty');
+
+    Http::assertNothingSent();
+});

@@ -86,6 +86,13 @@ class DeliverMessagesCommand extends Command
                 continue;
             }
 
+            if ($raw === '') {
+                $this->recordFailure($message, 0, "Archived message is empty at [{$message->archive_path}].");
+                $failed++;
+
+                continue;
+            }
+
             $timestamp = now()->getTimestamp();
             $token = bin2hex(random_bytes(25));
 

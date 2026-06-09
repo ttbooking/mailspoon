@@ -161,6 +161,8 @@ php artisan imap:pull default "INBOX/Archive"
 Опции:
 
 - `--with=` — список через запятую дополнительных частей письма для подгрузки.
+  Если опция не задана или пуста, используются `flags,headers,body`, необходимые
+  для сохранения полного сырого MIME.
 
 Подходит для запуска по расписанию (cron), когда долгоживущий процесс не нужен.
 
@@ -188,7 +190,7 @@ php artisan imap:sentry default
 
 ```ini
 [program:mailspoon]
-command=php /path/to/mailspoon/artisan imap:sentry default
+command=php /path/to/mailspoon/artisan imap:sentry default --with=flags,headers,body
 autostart=true
 autorestart=true
 ```
@@ -276,7 +278,7 @@ php artisan spoon:deliver --limit=100 --max-attempts=5
 
 ```ini
 [program:mailspoon]
-command=php /path/to/mailspoon/artisan imap:sentry default
+command=php /path/to/mailspoon/artisan imap:sentry default --with=flags,headers,body
 autostart=true
 autorestart=true
 ```

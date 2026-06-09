@@ -61,3 +61,16 @@ it('does not store the same message twice but still marks it seen', function () 
 
     expect(RelayedMessage::count())->toBe(1);
 });
+
+it('rejects an empty raw message without storing or marking it seen', function () {
+    Storage::fake('local');
+
+    $message = fakeIncomingMessage(raw: '');
+    $message->shouldNotReceive('markSeen');
+
+    expect(fn () => makeStoreListener()->handle(new MessageReceived($message)))
+        ->toThrow(UnexpectedValueException::class, 'empty raw MIME');
+
+    expect(RelayedMessage::count())->toBe(0);
+    Storage::disk('local')->assertDirectoryEmpty('/');
+});

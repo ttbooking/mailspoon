@@ -14,6 +14,8 @@ use Symfony\Component\Console\Attribute\AsCommand;
 #[AsCommand(name: 'imap:pull')]
 class ImapPullCommand extends Command
 {
+    public const DEFAULT_WITH = ['flags', 'headers', 'body'];
+
     /**
      * The name and signature of the console command.
      *
@@ -35,7 +37,7 @@ class ImapPullCommand extends Command
     {
         $mailbox = Imap::mailbox($name = $this->argument('mailbox'));
 
-        $with = explode(',', $this->option('with'));
+        $with = self::messageParts($this->option('with'));
 
         $this->info("Checking mailbox [$name]...");
 
@@ -45,6 +47,20 @@ class ImapPullCommand extends Command
         foreach ($query->get() as $message) {
             Event::dispatch(new MessageReceived($message));
         }
+    }
+
+    /**
+     * Resolve the message parts that must be fetched from IMAP.
+     *
+     * @return list<string>
+     */
+    public static function messageParts(mixed $with): array
+    {
+        $parts = array_values(array_filter(
+            array_map('trim', explode(',', (string) $with)),
+        ));
+
+        return $parts ?: self::DEFAULT_WITH;
     }
 
     /**
