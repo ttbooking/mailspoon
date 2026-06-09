@@ -201,18 +201,17 @@ Feature-уровня, переезжают почти механически. С
 
 ### Этап 4 — документация и релиз
 
-- [ ] README: установка (`composer require ttbooking/mailspoon`),
-      `vendor:publish --tag=mailspoon-config` (+ конфиг imapengine его тегом),
-      `php artisan migrate`, строка cron `schedule:run`, пример supervisor для
-      `mailspoon:sentry`. Раздел про переопределение конфига картами в PHP.
-- [ ] UPGRADE.md, раздел 2.x → 3.0: схема БД не меняется, перенос данных не
-      нужен; шаги — создать хост-приложение, перенести `.env`-значения
-      (таблица соответствия, отдельно — судьба `SPOON_PULL_SCHEDULE` →
-      массив в конфиге), таблица переименования команд (`imap:pull` →
-      `mailspoon:pull` и т.д.), указать на существующую БД и архив (или
-      перенести `storage/app/private/mailspoon`), обновить пути в
-      supervisor/cron.
-- [ ] CHANGELOG `[3.0.0]`, тег, GitHub Release.
+- [x] README: установка (`composer require ttbooking/mailspoon`),
+      `vendor:publish --tag=mailspoon-config` (+ конфиг imapengine — у его
+      провайдера нет тега, публикация через `--provider=`), `php artisan
+      migrate`, строка cron `schedule:run`, пример supervisor для
+      `mailspoon:sentry`, раздел про карты в опубликованном конфиге и блок
+      про обязательный `'throw' => true` на диске архива.
+- [x] UPGRADE.md, раздел 2.x → 3.0: сводная таблица ломающих изменений,
+      маппинг env-переменных и команд, `'throw' => true`, подключение
+      существующей БД и архива, supervisor/cron, проверка.
+- [x] CHANGELOG `[3.0.0] - 2026-06-10` (тег и GitHub Release — после merge
+      в master).
 - [ ] Packagist: публикация пакета, авто-обновление по GitHub-хуку.
 
 ### Этап 5 — миграция прода (wb2)
