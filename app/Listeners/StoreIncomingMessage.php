@@ -3,11 +3,11 @@
 namespace App\Listeners;
 
 use App\Models\RelayedMessage;
+use App\Support\ArchiveStorage;
 use Carbon\CarbonInterface;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Container\Attributes\Config;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
 use UnexpectedValueException;
@@ -106,7 +106,7 @@ class StoreIncomingMessage
             $name,
         );
 
-        Storage::disk($this->disk)->put($path, $raw);
+        ArchiveStorage::disk($this->disk)->put($path, $raw);
 
         return $path;
     }

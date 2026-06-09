@@ -68,6 +68,8 @@ php artisan migrate
 ```dotenv
 SPOON_ARCHIVE_DISK=local
 SPOON_ARCHIVE_PATH=mailspoon
+SPOON_RETENTION_DAYS=3
+SPOON_PRUNE_CRON="0 3 * * *"
 SPOON_TIMEOUT=15
 SPOON_CONNECT_TIMEOUT=3
 SPOON_TRIES=3
@@ -75,6 +77,10 @@ SPOON_BACKOFF=60,300,900,3600
 SPOON_MAX_ATTEMPTS=10
 SPOON_DELIVER_CRON="* * * * *"
 ```
+
+`SPOON_RETENTION_DAYS` по умолчанию равен `3`: доставленные и окончательно
+проваленные письма старше трёх дней удаляются вместе с архивом `.eml`.
+Чтобы сохранить данные бессрочно, явно задайте `SPOON_RETENTION_DAYS=0`.
 
 **6. Выберите режим чтения**
 

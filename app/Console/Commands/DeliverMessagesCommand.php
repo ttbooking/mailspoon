@@ -3,12 +3,12 @@
 namespace App\Console\Commands;
 
 use App\Models\RelayedMessage;
+use App\Support\ArchiveStorage;
 use Illuminate\Console\Command;
 use Illuminate\Container\Attributes\Config;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
 use Random\RandomException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
@@ -172,7 +172,7 @@ class DeliverMessagesCommand extends Command
             return null;
         }
 
-        $storage = Storage::disk($disk);
+        $storage = ArchiveStorage::disk($disk);
 
         return $storage->exists($message->archive_path)
             ? $storage->get($message->archive_path)

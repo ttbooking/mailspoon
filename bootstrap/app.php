@@ -3,6 +3,7 @@
 use App\Console\Commands\DeliverMessagesCommand;
 use App\Console\Commands\ImapPullCommand;
 use App\Console\Commands\ImapSentryCommand;
+use App\Models\RelayedMessage;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 
@@ -17,6 +18,15 @@ return Application::configure(basePath: dirname(__DIR__))
         // reading only stores messages — delivery happens here.
         if ($cron = config('spoon.schedule.deliver')) {
             $schedule->command('spoon:deliver')
+                ->cron($cron)
+                ->withoutOverlapping()
+                ->runInBackground();
+        }
+
+        if (config('spoon.retention.days', 0) > 0 && $cron = config('spoon.schedule.prune')) {
+            $schedule->command('model:prune', [
+                '--model' => RelayedMessage::class,
+            ])
                 ->cron($cron)
                 ->withoutOverlapping()
                 ->runInBackground();

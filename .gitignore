@@ -25,4 +25,7 @@ Thumbs.db
 
 # Project exclude paths
 /storage/app/
-/storage/framework/
+/storage/framework/*
+!/storage/framework/views/
+/storage/framework/views/*
+!/storage/framework/views/.gitignore

@@ -2,7 +2,8 @@
 
 > ✅ **Реализовано в 2.0.0.** Таблица `relayed_messages` (статусы
 > `pending`/`delivered`/`failed`, дедуп по `Message-Id`) — ядро store-and-forward.
-> Не вошло: команда очистки старых записей (`spoon:prune`) — осталась на потом.
+> Retention-очистка реализована после 2.0.1 через Eloquent `Prunable`: запись
+> удаляется только вместе со связанным MIME-архивом из #19.
 
 **Приоритет:** 🟡 средний · **Трудоёмкость:** M
 
@@ -46,14 +47,16 @@ if (RelayedMessage::where('message_id', $message->messageId())->delivered()->exi
 После доставки — запись/обновление статуса. Хорошо ложится на очередь из #01
 (статусы `pending → delivered/failed`).
 
-Команда обслуживания: `php artisan spoon:log --failed` / `spoon:prune --days=30`.
+Команда обслуживания: штатная `php artisan model:prune
+--model=App\\Models\\RelayedMessage`. Автоматический запуск включается через
+`SPOON_RETENTION_DAYS`; очистка журнала и архива выполняется совместно.
 
 ## Изменения конфигурации
 
 ```dotenv
 DB_CONNECTION=sqlite          # достаточно файла БД для лёгкого деплоя
 SPOON_DEDUP=true
-SPOON_LOG_RETENTION_DAYS=30
+SPOON_RETENTION_DAYS=30
 ```
 
 ## Замечания
@@ -67,4 +70,4 @@ SPOON_LOG_RETENTION_DAYS=30
 - [ ] Миграция + модель `RelayedMessage`.
 - [ ] Повторная доставка одного `Message-Id` не происходит.
 - [ ] Каждая попытка фиксируется со статусом и кодом ответа.
-- [ ] Команда очистки старых записей.
+- [x] Очистка старых завершённых записей вместе со связанным MIME-архивом.

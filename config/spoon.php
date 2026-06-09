@@ -60,6 +60,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Retention
+    |--------------------------------------------------------------------------
+    |
+    | Completed message records and their archived MIME are pruned together.
+    | The default retention period is three days; zero disables pruning.
+    |
+    */
+
+    'retention' => [
+        'days' => (int) env('SPOON_RETENTION_DAYS', 3),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Schedule
     |--------------------------------------------------------------------------
     |
@@ -73,6 +87,7 @@ return [
 
     'schedule' => [
         'deliver' => env('SPOON_DELIVER_CRON', '* * * * *'),
+        'prune' => env('SPOON_PRUNE_CRON', '0 3 * * *'),
 
         // Mailbox name => cron expression, e.g. 'default' => '*/5 * * * *'.
         'pull' => [

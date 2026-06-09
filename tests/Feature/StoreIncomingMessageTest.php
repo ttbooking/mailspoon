@@ -74,3 +74,17 @@ it('rejects an empty raw message without storing or marking it seen', function (
     expect(RelayedMessage::count())->toBe(0);
     Storage::disk('local')->assertDirectoryEmpty('/');
 });
+
+it('requires the archive disk to throw filesystem errors', function () {
+    Storage::fake('local');
+    config(['filesystems.disks.local.throw' => false]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldNotReceive('markSeen');
+
+    expect(fn () => makeStoreListener()->handle(new MessageReceived($message)))
+        ->toThrow(InvalidArgumentException::class, 'must be configured with [throw => true]');
+
+    expect(RelayedMessage::count())->toBe(0);
+    Storage::disk('local')->assertDirectoryEmpty('/');
+});

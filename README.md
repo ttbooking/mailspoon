@@ -122,6 +122,8 @@ SPOON_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
 ```dotenv
 SPOON_ARCHIVE_DISK=local       # диск из config/filesystems.php для сырого MIME
 SPOON_ARCHIVE_PATH=mailspoon   # префикс пути внутри диска
+SPOON_RETENTION_DAYS=3         # срок хранения записей и MIME; 0 отключает очистку
+SPOON_PRUNE_CRON="0 3 * * *"   # расписание очистки при включённом retention
 
 SPOON_TIMEOUT=15               # общий таймаут запроса доставки, сек
 SPOON_CONNECT_TIMEOUT=3        # таймаут на TCP-handshake, сек (не выше нескольких секунд)
@@ -131,6 +133,11 @@ SPOON_MAX_ATTEMPTS=10          # сколько попыток доставки,
 ```
 
 - `SPOON_ARCHIVE_DISK` / `SPOON_ARCHIVE_PATH` — куда складывается архив `.eml`.
+  Выбранный диск в `config/filesystems.php` обязан иметь `'throw' => true`,
+  чтобы ошибки записи, чтения и удаления не подавлялись Flysystem.
+- `SPOON_RETENTION_DAYS` — сколько дней хранить завершённые записи вместе с
+  `.eml`; по умолчанию `3`, значение `0` отключает автоматическую очистку.
+- `SPOON_PRUNE_CRON` — расписание штатной команды Laravel `model:prune`.
 - `SPOON_TIMEOUT` / `SPOON_CONNECT_TIMEOUT` — общий таймаут запроса и отдельный
   лимит на установление TCP-соединения, чтобы зависший handshake не подвешивал
   воркер.
@@ -250,6 +257,12 @@ php artisan spoon:deliver --limit=100 --max-attempts=5
   письма. Чтобы отключить — задайте `SPOON_DELIVER_CRON` пустым.
 - **`imap:pull` по ящикам** — карта `schedule.pull` (`имя ящика => cron`), по
   умолчанию пустая.
+- **Очистка журнала и архива** — по умолчанию включена с retention 3 дня.
+  При `SPOON_RETENTION_DAYS > 0` запускается
+  `model:prune` по расписанию `SPOON_PRUNE_CRON` (по умолчанию ежедневно в
+  03:00). Запись `relayed_messages` удаляется только вместе со связанным `.eml`.
+  Очищаются доставленные письма и окончательно проваленные письма с исчерпанным
+  `SPOON_MAX_ATTEMPTS`; активные `pending` и повторяемые `failed` сохраняются.
 
 Отсюда два режима эксплуатации:
 

@@ -21,3 +21,19 @@ it('does not schedule delivery when its cron is empty', function () {
         ->doesntExpectOutputToContain('spoon:deliver')
         ->assertSuccessful();
 });
+
+it('schedules model pruning with the default three day retention', function () {
+    expect(config('spoon.retention.days'))->toBe(3);
+
+    $this->artisan('schedule:list')
+        ->expectsOutputToContain('model:prune')
+        ->assertSuccessful();
+});
+
+it('does not schedule model pruning when retention is disabled', function () {
+    config(['spoon.retention.days' => 0]);
+
+    $this->artisan('schedule:list')
+        ->doesntExpectOutputToContain('model:prune')
+        ->assertSuccessful();
+});

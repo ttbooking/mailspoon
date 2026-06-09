@@ -2,7 +2,8 @@
 
 > ✅ **Реализовано в 2.0.0.** Сырой MIME сохраняется на диск (`spoon.archive.*`)
 > при приёме и служит источником для доставки `spoon:deliver`. Не вошло: команда
-> очистки по сроку хранения (`spoon:archive:prune`) — осталась на потом.
+> Retention-очистка реализована после 2.0.1 совместно с журналом из #05:
+> отдельной команды очистки архива нет, чтобы не терять связь файла с записью.
 
 **Приоритет:** 🟢 низкий · **Трудоёмкость:** M
 
@@ -32,10 +33,10 @@ Storage::disk(config('spoon.archive.disk'))->put(
 ```
 
 Связать путь с журналом (#05), чтобы из записи можно было открыть исходник и
-переотправить (#15). Команда очистки по сроку хранения:
+переотправить (#15). Очистка выполняется штатным Eloquent Prunable:
 
 ```bash
-php artisan spoon:archive:prune --days=90
+php artisan model:prune --model=App\\Models\\RelayedMessage
 ```
 
 ## Изменения конфигурации
@@ -44,7 +45,7 @@ php artisan spoon:archive:prune --days=90
 'archive' => [
     'enabled'   => env('SPOON_ARCHIVE', false),
     'disk'      => env('SPOON_ARCHIVE_DISK', 'local'),
-    'retention' => env('SPOON_ARCHIVE_DAYS', 90),
+    'retention' => env('SPOON_RETENTION_DAYS', 3),
     'when'      => env('SPOON_ARCHIVE_WHEN', 'delivered'), // always | delivered
 ],
 ```
@@ -52,13 +53,15 @@ php artisan spoon:archive:prune --days=90
 ```dotenv
 SPOON_ARCHIVE=true
 SPOON_ARCHIVE_DISK=s3
-SPOON_ARCHIVE_DAYS=90
+SPOON_RETENTION_DAYS=90
 ```
 
 ## Замечания
 
 - Сырой MIME = персональные данные → учесть шифрование на диске и срок
   хранения (комплаенс).
+- Архивный диск обязан иметь `'throw' => true`, чтобы сбои записи, чтения и
+  удаления не превращались в незаметный `false`.
 - `when=always` сохраняет даже недоставленные — полезно для расследований.
 - Архив — источник для replay (#15) и для повторной индексации.
 
@@ -66,5 +69,5 @@ SPOON_ARCHIVE_DAYS=90
 
 - [ ] Сохранение `.eml` на выбранный диск с осмысленным путём.
 - [ ] Привязка к журналу (#05) для replay.
-- [ ] Команда очистки по сроку хранения.
-- [ ] Выключено по умолчанию.
+- [x] Совместная очистка архива и записи журнала по сроку хранения.
+- [x] По умолчанию хранится 3 дня; значение `0` отключает очистку.
