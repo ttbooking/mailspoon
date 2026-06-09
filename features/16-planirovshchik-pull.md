@@ -1,5 +1,10 @@
 # 16. Планировщик (cron) для pull
 
+> ✅ **Реализовано в 2.0.0.** Встроенный планировщик (`bootstrap/app.php`,
+> `withoutOverlapping`): `spoon:deliver` по умолчанию + опционально `imap:pull`
+> по ящикам из `config('spoon.schedule.pull')`. Включает режим cron-poll одной
+> строкой `schedule:run`.
+
 **Приоритет:** 🟢 низкий · **Трудоёмкость:** S
 
 ## Проблема
