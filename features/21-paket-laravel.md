@@ -185,17 +185,19 @@ Feature-уровня, переезжают почти механически. С
 
 ### Этап 3 — тесты на testbench
 
-- [ ] `tests/TestCase.php` → `Orchestra\Testbench\TestCase`:
+- [x] `tests/TestCase.php` → `Orchestra\Testbench\TestCase`:
       `getPackageProviders()` возвращает `MailspoonServiceProvider` +
       `ImapServiceProvider` (imapengine); `defineEnvironment()` задаёт
-      sqlite `:memory:`, `spoon.*`-дефолты тестов.
-- [ ] `RefreshDatabase` продолжает работать поверх `loadMigrationsFrom`.
-- [ ] Снести стоковые `tests/Feature/ExampleTest.php` и
+      sqlite `:memory:` и `filesystems.disks.local.throw => true` (в скелете
+      testbench дефолт `false`, а `ArchiveStorage` такие диски отвергает).
+- [x] `RefreshDatabase` продолжает работать поверх `loadMigrationsFrom`.
+- [x] Снести стоковые `tests/Feature/ExampleTest.php` и
       `tests/Unit/ExampleTest.php` (последний воскрес в e0da630), почистить
       `phpunit.xml` от app-специфики (`APP_KEY` и т.п. задаёт testbench).
-- [ ] `ScheduleTest` переписать: расписание теперь регистрирует провайдер —
-      инспектировать `Schedule::events()` напрямую вместо `schedule:list`.
-- [ ] Паритет: те же 27 тестов (минус Example) зелёные; Pint без изменений.
+- [x] `ScheduleTest` переписывать не пришлось: расписание регистрируется
+      лениво (`callAfterResolving`), поэтому `config()` в теле теста успевает
+      примениться до `schedule:list`.
+- [x] Паритет: 25 тестов (27 минус два Example) зелёные; Pint чистый.
 
 ### Этап 4 — документация и релиз
 

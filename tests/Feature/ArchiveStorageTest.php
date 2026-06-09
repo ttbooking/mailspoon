@@ -1,9 +1,9 @@
 <?php
 
-use App\Support\ArchiveStorage;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Storage;
+use TTBooking\Mailspoon\Support\ArchiveStorage;
 
 it('resolves an archive disk configured to throw filesystem errors', function () {
     Config::set('filesystems.disks.archive', [

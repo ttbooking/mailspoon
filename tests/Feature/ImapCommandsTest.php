@@ -1,7 +1,5 @@
 <?php
 
-use App\Console\Commands\ImapPullCommand;
-use App\Console\Commands\ImapSentryCommand;
 use DirectoryTree\ImapEngine\Collections\MessageCollection;
 use DirectoryTree\ImapEngine\FolderInterface;
 use DirectoryTree\ImapEngine\Laravel\Facades\Imap;
@@ -9,6 +7,8 @@ use DirectoryTree\ImapEngine\MailboxInterface;
 use DirectoryTree\ImapEngine\MessageQueryInterface;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
+use TTBooking\Mailspoon\Commands\ImapPullCommand;
+use TTBooking\Mailspoon\Commands\ImapSentryCommand;
 
 it('fetches flags headers and body by default', function () {
     $query = Mockery::mock(MessageQueryInterface::class);
@@ -26,7 +26,7 @@ it('fetches flags headers and body by default', function () {
 
     Imap::shouldReceive('mailbox')->once()->with('default')->andReturn($mailbox);
 
-    $this->artisan('imap:pull default')->assertSuccessful();
+    $this->artisan('mailspoon:pull default')->assertSuccessful();
 });
 
 it('uses the full MIME parts when with is omitted or empty', function () {
@@ -55,6 +55,6 @@ it('passes the default full MIME parts to pull and watch', function () {
         new BufferedOutput,
     );
 
-    expect($command->calls['imap:pull']['--with'])->toBe('flags,headers,body')
+    expect($command->calls['mailspoon:pull']['--with'])->toBe('flags,headers,body')
         ->and($command->calls['imap:watch']['--with'])->toBe('flags,headers,body');
 });

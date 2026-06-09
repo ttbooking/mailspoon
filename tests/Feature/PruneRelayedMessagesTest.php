@@ -1,10 +1,10 @@
 <?php
 
-use App\Models\RelayedMessage;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\UnableToDeleteFile;
+use TTBooking\Mailspoon\Models\RelayedMessage;
 
 uses(RefreshDatabase::class);
 

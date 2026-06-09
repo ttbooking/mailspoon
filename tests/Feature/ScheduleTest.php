@@ -1,16 +1,16 @@
 <?php
 
-it('schedules spoon:deliver by default', function () {
+it('schedules mailspoon:deliver by default', function () {
     $this->artisan('schedule:list')
-        ->expectsOutputToContain('spoon:deliver')
+        ->expectsOutputToContain('mailspoon:deliver')
         ->assertSuccessful();
 });
 
-it('schedules imap:pull for each configured mailbox', function () {
+it('schedules mailspoon:pull for each configured mailbox', function () {
     config(['mailspoon.schedule.pull' => ['default' => '*/5 * * * *']]);
 
     $this->artisan('schedule:list')
-        ->expectsOutputToContain('imap:pull')
+        ->expectsOutputToContain('mailspoon:pull')
         ->assertSuccessful();
 });
 
@@ -18,7 +18,7 @@ it('does not schedule delivery when its cron is empty', function () {
     config(['mailspoon.schedule.deliver' => '']);
 
     $this->artisan('schedule:list')
-        ->doesntExpectOutputToContain('spoon:deliver')
+        ->doesntExpectOutputToContain('mailspoon:deliver')
         ->assertSuccessful();
 });
 
