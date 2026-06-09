@@ -17,8 +17,8 @@
 `config/mailspoon.php` задаёт **один** глобальный `endpoint` и `key`:
 
 ```php
-'endpoint' => env('SPOON_ENDPOINT'),
-'key' => env('SPOON_KEY'),
+'endpoint' => env('MAILSPOON_ENDPOINT'),
+'key' => env('MAILSPOON_KEY'),
 ```
 
 При этом `config/imap.php` уже поддерживает несколько ящиков (`mailboxes`).
@@ -60,17 +60,17 @@ fan-out добавлялся позже без ломающей миграции
 ```php
 return [
     // дефолт (back-compat)
-    'endpoint' => env('SPOON_ENDPOINT'),
-    'key' => env('SPOON_KEY'),
+    'endpoint' => env('MAILSPOON_ENDPOINT'),
+    'key' => env('MAILSPOON_KEY'),
 
     'routes' => [
         'support' => [                       // имя ящика из config/imap.php
-            'endpoint' => env('SPOON_SUPPORT_ENDPOINT'),
-            'key' => env('SPOON_SUPPORT_KEY'),
+            'endpoint' => env('MAILSPOON_SUPPORT_ENDPOINT'),
+            'key' => env('MAILSPOON_SUPPORT_KEY'),
         ],
         'billing' => [
-            'endpoint' => env('SPOON_BILLING_ENDPOINT'),
-            'key' => env('SPOON_BILLING_KEY'),
+            'endpoint' => env('MAILSPOON_BILLING_ENDPOINT'),
+            'key' => env('MAILSPOON_BILLING_KEY'),
         ],
     ],
 ];
@@ -124,10 +124,10 @@ $key = config("mailspoon.routes.{$message->mailbox}.key") ?? $this->key;
 ### Изменения конфигурации
 
 ```dotenv
-SPOON_SUPPORT_ENDPOINT=https://app/.../mime
-SPOON_SUPPORT_KEY=key-...
-SPOON_BILLING_ENDPOINT=https://other/.../mime
-SPOON_BILLING_KEY=key-...
+MAILSPOON_SUPPORT_ENDPOINT=https://app/.../mime
+MAILSPOON_SUPPORT_KEY=key-...
+MAILSPOON_BILLING_ENDPOINT=https://other/.../mime
+MAILSPOON_BILLING_KEY=key-...
 ```
 
 ### Definition of Done (фаза 1)
@@ -157,12 +157,12 @@ SPOON_BILLING_KEY=key-...
     // fan-out: общий ящик, письмо получают оба приложения
     'support' => [
         'crm' => [
-            'endpoint' => env('SPOON_SUPPORT_CRM_ENDPOINT'),
-            'key' => env('SPOON_SUPPORT_CRM_KEY'),
+            'endpoint' => env('MAILSPOON_SUPPORT_CRM_ENDPOINT'),
+            'key' => env('MAILSPOON_SUPPORT_CRM_KEY'),
         ],
         'helpdesk' => [
-            'endpoint' => env('SPOON_SUPPORT_HELPDESK_ENDPOINT'),
-            'key' => env('SPOON_SUPPORT_HELPDESK_KEY'),
+            'endpoint' => env('MAILSPOON_SUPPORT_HELPDESK_ENDPOINT'),
+            'key' => env('MAILSPOON_SUPPORT_HELPDESK_KEY'),
         ],
     ],
 ],
@@ -219,11 +219,12 @@ $shared = self::query()
 ## Замечания
 
 - Back-compat: без `routes` (или для ящика без маршрута) поведение в точности
-  сегодняшнее — глобальные `SPOON_ENDPOINT`/`SPOON_KEY`.
+  сегодняшнее — глобальные `MAILSPOON_ENDPOINT`/`MAILSPOON_KEY`.
 - Endpoint зафиксирован в записи на момент захвата; ключ берётся из конфига на
   момент доставки. Следствие: ротация ключа действует на pending-письма сразу,
   а смена endpoint — только на новые письма (старые доедут на прежний адрес).
 - Хорошо сочетается с #04 (фильтрация) — правила можно держать на уровне
   маршрута.
 - Запуск нескольких воркеров: по одному `mailspoon:sentry <mailbox>` на ящик под
-  supervisor (см. #09) либо cron-poll через `SPOON_PULL_SCHEDULE` (#16).
+  supervisor (см. #09) либо cron-poll через карту `mailspoon.schedule.pull`
+  в опубликованном конфиге (#16, #21).

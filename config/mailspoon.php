@@ -8,8 +8,8 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    'endpoint' => env('SPOON_ENDPOINT'),
-    'key' => env('SPOON_KEY'),
+    'endpoint' => env('MAILSPOON_ENDPOINT'),
+    'key' => env('MAILSPOON_KEY'),
 
     /*
     |--------------------------------------------------------------------------
@@ -23,8 +23,8 @@ return [
     */
 
     'archive' => [
-        'disk' => env('SPOON_ARCHIVE_DISK', 'local'),
-        'path' => env('SPOON_ARCHIVE_PATH', 'mailspoon'),
+        'disk' => env('MAILSPOON_ARCHIVE_DISK', 'local'),
+        'path' => env('MAILSPOON_ARCHIVE_PATH', 'mailspoon'),
     ],
 
     /*
@@ -41,20 +41,20 @@ return [
     */
 
     'delivery' => [
-        'max_attempts' => (int) env('SPOON_MAX_ATTEMPTS', 10),
+        'max_attempts' => (int) env('MAILSPOON_MAX_ATTEMPTS', 10),
 
         // Total request timeout, and a separate cap on the TCP connect phase
         // so a stalled handshake can't hang the worker.
-        'timeout' => (int) env('SPOON_TIMEOUT', 15),
-        'connect_timeout' => (int) env('SPOON_CONNECT_TIMEOUT', 3),
+        'timeout' => (int) env('MAILSPOON_TIMEOUT', 15),
+        'connect_timeout' => (int) env('MAILSPOON_CONNECT_TIMEOUT', 3),
 
         // In-process retries per attempt for transient failures.
-        'retries' => (int) env('SPOON_TRIES', 3),
+        'retries' => (int) env('MAILSPOON_TRIES', 3),
 
         // Back-off (seconds) between runs, indexed by attempt number.
         'backoff' => array_values(array_filter(array_map(
             'intval',
-            explode(',', (string) env('SPOON_BACKOFF', '60,300,900,3600'))
+            explode(',', (string) env('MAILSPOON_BACKOFF', '60,300,900,3600'))
         ))),
     ],
 
@@ -69,7 +69,7 @@ return [
     */
 
     'retention' => [
-        'days' => (int) env('SPOON_RETENTION_DAYS', 3),
+        'days' => (int) env('MAILSPOON_RETENTION_DAYS', 3),
     ],
 
     /*
@@ -87,8 +87,8 @@ return [
     */
 
     'schedule' => [
-        'deliver' => env('SPOON_DELIVER_CRON', '* * * * *'),
-        'prune' => env('SPOON_PRUNE_CRON', '0 3 * * *'),
+        'deliver' => env('MAILSPOON_DELIVER_CRON', '* * * * *'),
+        'prune' => env('MAILSPOON_PRUNE_CRON', '0 3 * * *'),
 
         // Mailbox name => cron expression. Override in the published config,
         // e.g. 'default' => '*/5 * * * *'.
