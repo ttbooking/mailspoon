@@ -113,6 +113,107 @@ Feature-уровня, переезжают почти механически. С
 конфиг. Конфиги хоста — собственность деплоя, проблема «не трогать
 отслеживаемые файлы» исчезает по построению.
 
+## План реализации
+
+Объём переносимой логики невелик — 6 классов (3 команды, listener, модель,
+`ArchiveStorage`), 1 миграция, 1 конфиг, 27 тестов. Основная работа — каркас
+пакета и перевод тестов.
+
+### Решения, принятые заранее
+
+- **Конвертируем этот же репозиторий**, а не заводим новый: сохраняется
+  история, теги v1–v2.1.1, релизы, и имя `ttbooking/mailspoon` в
+  `composer.json` уже совпадает с будущим именем пакета. Для прода заводится
+  отдельное тонкое хост-приложение (см. этап 6).
+- **Ветка поддержки `2.x`** создаётся от master перед началом работ — хотфиксы
+  прода до его миграции выпускаются из неё (2.1.x).
+- **Зависимости — точечные `illuminate/*`** (console, database, events,
+  http, support, contracts), а не весь `laravel/framework`: пакету не нужны
+  views/session/mail, а хосту это развязывает руки по версиям.
+
+### Этап 1 — каркас пакета
+
+- [ ] `composer.json`: `type` `project` → `library`; `require` →
+      `php ^8.3` + `illuminate/* ^13.0` + `directorytree/imapengine-laravel ^1.0`;
+      убрать app-only пакеты (`laravel/tinker`, `laravel/sail`, `laravel/pail`,
+      `fakerphp/faker`); `require-dev` + `orchestra/testbench` (версия под
+      Laravel 13); убрать `post-autoload-dump`/`post-update-cmd` скрипты
+      приложения; добавить авто-discovery:
+      `extra.laravel.providers = [TTBooking\Mailspoon\MailspoonServiceProvider::class]`.
+- [ ] Перенос кода в `src/` со сменой неймспейса `App\` → `TTBooking\Mailspoon\`:
+      `app/Console/Commands/*` → `src/Commands/`, `app/Listeners/*` →
+      `src/Listeners/`, `app/Models/*` → `src/Models/`, `app/Support/*` →
+      `src/Support/`. PSR-4: `"TTBooking\\Mailspoon\\": "src/"`.
+- [ ] `config/spoon.php` остаётся в корне пакета; миграция остаётся в
+      `database/migrations/`.
+- [ ] Удалить скелет приложения: `bootstrap/`, `routes/`, `public/`,
+      `resources/`, `storage/`, `artisan`, `app/Http`, `app/Providers`,
+      остальные `config/*` (включая `config/view.php` — боль хоста, не пакета),
+      `.env.example` (содержимое переезжает в README хост-приложения).
+
+### Этап 2 — MailspoonServiceProvider
+
+- [ ] `register()`: `mergeConfigFrom(config/spoon.php, 'spoon')`.
+      Помнить: merge верхнеуровневый — published-конфиг хоста должен сохранять
+      полную структуру секций (стандартная практика, фиксируем в README).
+- [ ] `boot()`: `publishes([... => config_path('spoon.php')], 'mailspoon-config')`;
+      `loadMigrationsFrom(database/migrations)` +
+      `publishesMigrations(...)` (Laravel 13 переписывает даты при публикации);
+      `Event::listen(MessageReceived::class, StoreIncomingMessage::class)` —
+      авто-discovery листенеров на пакеты не действует.
+- [ ] Консольная часть (`runningInConsole()`): `commands([...3 команды...])` +
+      перенос расписания из `bootstrap/app.php` (deliver / prune / pull-карта)
+      в `callAfterResolving(Schedule::class, ...)` — логика копируется 1:1.
+- [ ] Конфиг: ключ `schedule.pull` становится обычным массивом
+      `['default' => '*/5 * * * *']`, `json_decode`/`SPOON_PULL_SCHEDULE`
+      удаляются. Скалярные настройки сохраняют `env()`-дефолты — это
+      работает и в merged-конфиге без публикации.
+
+### Этап 3 — тесты на testbench
+
+- [ ] `tests/TestCase.php` → `Orchestra\Testbench\TestCase`:
+      `getPackageProviders()` возвращает `MailspoonServiceProvider` +
+      `ImapServiceProvider` (imapengine); `defineEnvironment()` задаёт
+      sqlite `:memory:`, `spoon.*`-дефолты тестов.
+- [ ] `RefreshDatabase` продолжает работать поверх `loadMigrationsFrom`.
+- [ ] Снести стоковые `tests/Feature/ExampleTest.php` и
+      `tests/Unit/ExampleTest.php` (последний воскрес в e0da630), почистить
+      `phpunit.xml` от app-специфики (`APP_KEY` и т.п. задаёт testbench).
+- [ ] `ScheduleTest` переписать: расписание теперь регистрирует провайдер —
+      инспектировать `Schedule::events()` напрямую вместо `schedule:list`.
+- [ ] Паритет: те же 27 тестов (минус Example) зелёные; Pint без изменений.
+
+### Этап 4 — документация и релиз
+
+- [ ] README: установка (`composer require ttbooking/mailspoon`),
+      `vendor:publish --tag=mailspoon-config` (+ конфиг imapengine его тегом),
+      `php artisan migrate`, строка cron `schedule:run`, пример supervisor для
+      `imap:sentry`. Раздел про переопределение конфига картами в PHP.
+- [ ] UPGRADE.md, раздел 2.x → 3.0: схема БД не меняется, перенос данных не
+      нужен; шаги — создать хост-приложение, перенести `.env`-значения
+      (таблица соответствия, отдельно — судьба `SPOON_PULL_SCHEDULE` →
+      массив в конфиге), указать на существующую БД и архив (или перенести
+      `storage/app/private/mailspoon`), обновить пути в supervisor/cron.
+- [ ] CHANGELOG `[3.0.0]`, тег, GitHub Release.
+- [ ] Packagist: публикация пакета, авто-обновление по GitHub-хуку.
+
+### Этап 5 — миграция прода (wb2)
+
+- [ ] Тонкое хост-приложение (`laravel new` + require пакета) в отдельном
+      приватном репозитории; `.env` и опубликованный конфиг — собственность
+      деплоя, проблема «не трогать отслеживаемые файлы» исчезает.
+- [ ] Перенос данных: existing sqlite + каталог архива (или смена путей в
+      конфиге на старые места).
+- [ ] supervisor: обновить путь artisan в программе `mailspoon-idle`
+      (`laravel-queue-horizon` не трогаем); cron `schedule:run` — путь.
+- [ ] Прогон: `imap:pull` тестового ящика, контроль доставки и prune; после
+      стабилизации — снос старого checkout, ветка `2.x` объявляется EOL.
+
+### Оценка
+
+Этапы 1–2 — день; этап 3 — день-полтора (самая нудная часть); этапы 4–5 —
+полдня + наблюдение за продом. Итого ~3 рабочих дня без спешки.
+
 ## Версионирование
 
 Ломающее изменение всего: установка, неймспейсы, расположение конфигов,
