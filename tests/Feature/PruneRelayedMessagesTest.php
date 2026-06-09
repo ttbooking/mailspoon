@@ -48,7 +48,7 @@ it('prunes an expired delivered record together with its archived MIME', functio
     Storage::disk('local')->assertMissing($message->archive_path);
 });
 
-it('prunes an expired failed record only after retries are exhausted', function () {
+it('keeps failed records regardless of age or exhausted retries', function () {
     $terminal = retainedMessage([
         'status' => RelayedMessage::STATUS_FAILED,
         'attempts' => 3,
@@ -65,9 +65,9 @@ it('prunes an expired failed record only after retries are exhausted', function 
     $this->artisan('model:prune', ['--model' => [RelayedMessage::class]])
         ->assertSuccessful();
 
-    expect(RelayedMessage::find($terminal->id))->toBeNull()
+    expect(RelayedMessage::find($terminal->id))->not->toBeNull()
         ->and(RelayedMessage::find($retryable->id))->not->toBeNull();
-    Storage::disk('local')->assertMissing($terminal->archive_path);
+    Storage::disk('local')->assertExists($terminal->archive_path);
     Storage::disk('local')->assertExists($retryable->archive_path);
 });
 

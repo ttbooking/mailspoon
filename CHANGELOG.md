@@ -9,8 +9,9 @@
 
 ### Added
 
-- Опциональная retention-очистка на базе Eloquent `Prunable`: завершённые
-  записи `relayed_messages` удаляются вместе со связанными архивами `.eml`.
+- Retention-очистка на базе Eloquent `Prunable`: успешно доставленные записи
+  `relayed_messages` удаляются вместе со связанными архивами `.eml`; записи
+  `pending` и `failed` автоматически не удаляются.
   По умолчанию срок хранения равен 3 дня; очистка запускается планировщиком по
   `SPOON_PRUNE_CRON`. Для отключения задайте `SPOON_RETENTION_DAYS=0`.
 - Архивный filesystem disk теперь обязан использовать `'throw' => true`;

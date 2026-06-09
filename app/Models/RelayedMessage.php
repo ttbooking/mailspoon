@@ -40,7 +40,6 @@ final class RelayedMessage extends Model
     public function prunable(): Builder
     {
         $days = max(0, (int) config('spoon.retention.days', 0));
-        $maxAttempts = (int) config('spoon.delivery.max_attempts', 10);
         $cutoff = now()->subDays($days);
 
         if ($days === 0) {
@@ -48,18 +47,8 @@ final class RelayedMessage extends Model
         }
 
         return self::query()
-            ->where(function (Builder $query) use ($cutoff, $maxAttempts) {
-                $query
-                    ->where(fn (Builder $query) => $query
-                        ->where('status', self::STATUS_DELIVERED)
-                        ->where('delivered_at', '<=', $cutoff)
-                    )
-                    ->orWhere(fn (Builder $query) => $query
-                        ->where('status', self::STATUS_FAILED)
-                        ->where('attempts', '>=', $maxAttempts)
-                        ->where('updated_at', '<=', $cutoff)
-                    );
-            });
+            ->where('status', self::STATUS_DELIVERED)
+            ->where('delivered_at', '<=', $cutoff);
     }
 
     /**
