@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace App\Models;
+namespace TTBooking\Mailspoon\Models;
 
-use App\Support\ArchiveStorage;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Support\Str;
+use TTBooking\Mailspoon\Support\ArchiveStorage;
 
 final class RelayedMessage extends Model
 {

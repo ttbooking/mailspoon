@@ -133,20 +133,20 @@ Feature-уровня, переезжают почти механически. С
 
 ### Этап 1 — каркас пакета
 
-- [ ] `composer.json`: `type` `project` → `library`; `require` →
+- [x] `composer.json`: `type` `project` → `library`; `require` →
       `php ^8.3` + `illuminate/* ^13.0` + `directorytree/imapengine-laravel ^1.0`;
       убрать app-only пакеты (`laravel/tinker`, `laravel/sail`, `laravel/pail`,
       `fakerphp/faker`); `require-dev` + `orchestra/testbench` (версия под
       Laravel 13); убрать `post-autoload-dump`/`post-update-cmd` скрипты
       приложения; добавить авто-discovery:
       `extra.laravel.providers = [TTBooking\Mailspoon\MailspoonServiceProvider::class]`.
-- [ ] Перенос кода в `src/` со сменой неймспейса `App\` → `TTBooking\Mailspoon\`:
+- [x] Перенос кода в `src/` со сменой неймспейса `App\` → `TTBooking\Mailspoon\`:
       `app/Console/Commands/*` → `src/Commands/`, `app/Listeners/*` →
       `src/Listeners/`, `app/Models/*` → `src/Models/`, `app/Support/*` →
       `src/Support/`. PSR-4: `"TTBooking\\Mailspoon\\": "src/"`.
-- [ ] `config/spoon.php` остаётся в корне пакета; миграция остаётся в
+- [x] `config/spoon.php` остаётся в корне пакета; миграция остаётся в
       `database/migrations/`.
-- [ ] Удалить скелет приложения: `bootstrap/`, `routes/`, `public/`,
+- [x] Удалить скелет приложения: `bootstrap/`, `routes/`, `public/`,
       `resources/`, `storage/`, `artisan`, `app/Http`, `app/Providers`,
       остальные `config/*` (включая `config/view.php` — боль хоста, не пакета),
       `.env.example` (содержимое переезжает в README хост-приложения).

@@ -1,9 +1,7 @@
 <?php
 
-namespace App\Console\Commands;
+namespace TTBooking\Mailspoon\Commands;
 
-use App\Models\RelayedMessage;
-use App\Support\ArchiveStorage;
 use Illuminate\Console\Command;
 use Illuminate\Container\Attributes\Config;
 use Illuminate\Http\Client\ConnectionException;
@@ -12,6 +10,8 @@ use Illuminate\Support\Facades\Http;
 use Random\RandomException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
+use TTBooking\Mailspoon\Models\RelayedMessage;
+use TTBooking\Mailspoon\Support\ArchiveStorage;
 
 #[AsCommand(name: 'spoon:deliver')]
 class DeliverMessagesCommand extends Command

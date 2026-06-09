@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Console\Commands;
+namespace TTBooking\Mailspoon\Commands;
 
 use Illuminate\Console\Command;
 use Symfony\Component\Console\Attribute\AsCommand;

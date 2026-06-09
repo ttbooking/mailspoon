@@ -1,15 +1,15 @@
 <?php
 
-namespace App\Listeners;
+namespace TTBooking\Mailspoon\Listeners;
 
-use App\Models\RelayedMessage;
-use App\Support\ArchiveStorage;
 use Carbon\CarbonInterface;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Container\Attributes\Config;
 use Illuminate\Support\Str;
 use Throwable;
+use TTBooking\Mailspoon\Models\RelayedMessage;
+use TTBooking\Mailspoon\Support\ArchiveStorage;
 use UnexpectedValueException;
 
 /**

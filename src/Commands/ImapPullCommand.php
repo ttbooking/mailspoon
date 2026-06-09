@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Console\Commands;
+namespace TTBooking\Mailspoon\Commands;
 
 use DirectoryTree\ImapEngine\FolderInterface;
 use DirectoryTree\ImapEngine\Laravel\Commands\ConfigureIdleQuery;
