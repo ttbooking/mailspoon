@@ -70,6 +70,7 @@ SPOON_ARCHIVE_DISK=local
 SPOON_ARCHIVE_PATH=mailspoon
 SPOON_RETENTION_DAYS=3
 SPOON_PRUNE_CRON="0 3 * * *"
+SPOON_PULL_SCHEDULE='{"default":"*/5 * * * *"}'
 SPOON_TIMEOUT=15
 SPOON_CONNECT_TIMEOUT=3
 SPOON_TRIES=3
@@ -85,9 +86,9 @@ SPOON_DELIVER_CRON="* * * * *"
 
 **6. Выберите режим чтения**
 
-- **Cron-poll** (без долгоживущих процессов): пропишите ящики в
-  `config/spoon.php` → `schedule.pull` (`имя ящика => cron`). Тот же
-  `schedule:run` будет периодически дёргать `imap:pull`.
+- **Cron-poll** (без долгоживущих процессов): задайте в `.env`
+  `SPOON_PULL_SCHEDULE` как JSON-объект `имя ящика => cron`. Тот же
+  `schedule:run` будет периодически вызывать `imap:pull`.
 - **Realtime**: продолжайте держать `imap:sentry` под супервизором — он будет
   сохранять письма по мере поступления, а `spoon:deliver` (из шага 4) их
   доставит.

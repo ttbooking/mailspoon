@@ -16,6 +16,8 @@
   `SPOON_PRUNE_CRON`. Для отключения задайте `SPOON_RETENTION_DAYS=0`.
 - Архивный filesystem disk теперь обязан использовать `'throw' => true`;
   встроенные диски `local` и `s3` настроены соответственно.
+- Расписание cron-poll для `imap:pull` настраивается через
+  `SPOON_PULL_SCHEDULE` в `.env`, без изменения отслеживаемых config-файлов.
 
 ### Fixed
 

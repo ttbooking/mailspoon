@@ -124,6 +124,7 @@ SPOON_ARCHIVE_DISK=local       # диск из config/filesystems.php для с�
 SPOON_ARCHIVE_PATH=mailspoon   # префикс пути внутри диска
 SPOON_RETENTION_DAYS=3         # срок хранения записей и MIME; 0 отключает очистку
 SPOON_PRUNE_CRON="0 3 * * *"   # расписание очистки при включённом retention
+SPOON_PULL_SCHEDULE='{"default":"*/5 * * * *"}'
 
 SPOON_TIMEOUT=15               # общий таймаут запроса доставки, сек
 SPOON_CONNECT_TIMEOUT=3        # таймаут на TCP-handshake, сек (не выше нескольких секунд)
@@ -138,6 +139,8 @@ SPOON_MAX_ATTEMPTS=10          # сколько попыток доставки,
 - `SPOON_RETENTION_DAYS` — сколько дней хранить завершённые записи вместе с
   `.eml`; по умолчанию `3`, значение `0` отключает автоматическую очистку.
 - `SPOON_PRUNE_CRON` — расписание штатной команды Laravel `model:prune`.
+- `SPOON_PULL_SCHEDULE` — JSON-объект `имя ящика => cron` для режима
+  cron-poll. Пустое значение или `{}` отключает периодический `imap:pull`.
 - `SPOON_TIMEOUT` / `SPOON_CONNECT_TIMEOUT` — общий таймаут запроса и отдельный
   лимит на установление TCP-соединения, чтобы зависший handshake не подвешивал
   воркер.
@@ -255,8 +258,8 @@ php artisan spoon:deliver --limit=100 --max-attempts=5
 - **`spoon:deliver`** — включён по умолчанию (`SPOON_DELIVER_CRON`, по умолчанию
   каждую минуту). Нужен в любом режиме, поскольку чтение только **сохраняет**
   письма. Чтобы отключить — задайте `SPOON_DELIVER_CRON` пустым.
-- **`imap:pull` по ящикам** — карта `schedule.pull` (`имя ящика => cron`), по
-  умолчанию пустая.
+- **`imap:pull` по ящикам** — задаётся через `SPOON_PULL_SCHEDULE` как
+  JSON-объект `имя ящика => cron`, по умолчанию выключен.
 - **Очистка журнала и архива** — по умолчанию включена с retention 3 дня.
   При `SPOON_RETENTION_DAYS > 0` запускается
   `model:prune` по расписанию `SPOON_PRUNE_CRON` (по умолчанию ежедневно в
@@ -268,22 +271,22 @@ php artisan spoon:deliver --limit=100 --max-attempts=5
 
 | Режим | Чтение | Демон / supervisor | Латентность |
 | ----- | ------ | ------------------ | ----------- |
-| **Cron-poll** | `imap:pull` по `schedule.pull` | не нужен | = интервал cron |
+| **Cron-poll** | `imap:pull` по `SPOON_PULL_SCHEDULE` | не нужен | = интервал cron |
 | **Realtime** | `imap:sentry` (IMAP IDLE) под supervisor | нужен для watcher | секунды |
 
 В обоих режимах доставку выполняет запланированный `spoon:deliver` —
 отдельный демон или очередь для неё не требуются.
 
-**Cron-poll** (без долгоживущих процессов) — добавьте ящики в `schedule.pull`:
+**Cron-poll** (без долгоживущих процессов) — задайте расписание в `.env`:
 
-```php
-// config/spoon.php
-'schedule' => [
-    'deliver' => env('SPOON_DELIVER_CRON', '* * * * *'),
-    'pull' => [
-        'default' => '*/5 * * * *',
-    ],
-],
+```dotenv
+SPOON_PULL_SCHEDULE='{"default":"*/5 * * * *"}'
+```
+
+Для нескольких ящиков:
+
+```dotenv
+SPOON_PULL_SCHEDULE='{"default":"*/5 * * * *","secondary":"0 * * * *"}'
 ```
 
 **Realtime** — держите `imap:sentry` под супервизором; `spoon:deliver` при этом

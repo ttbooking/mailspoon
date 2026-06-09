@@ -2,8 +2,8 @@
 
 > ✅ **Реализовано в 2.0.0.** Встроенный планировщик (`bootstrap/app.php`,
 > `withoutOverlapping`): `spoon:deliver` по умолчанию + опционально `imap:pull`
-> по ящикам из `config('spoon.schedule.pull')`. Включает режим cron-poll одной
-> строкой `schedule:run`.
+> по ящикам из `SPOON_PULL_SCHEDULE`. Включает режим cron-poll одной строкой
+> `schedule:run`.
 
 **Приоритет:** 🟢 низкий · **Трудоёмкость:** S
 
@@ -43,12 +43,8 @@ foreach (config('spoon.schedule', []) as $mailbox => $cron) {
 
 ## Изменения конфигурации
 
-```php
-// config/spoon.php
-'schedule' => [
-    'default' => '*/5 * * * *',   // каждые 5 минут
-    'billing' => '*/15 * * * *',
-],
+```dotenv
+SPOON_PULL_SCHEDULE='{"default":"*/5 * * * *","billing":"*/15 * * * *"}'
 ```
 
 ## Замечания
@@ -61,6 +57,6 @@ foreach (config('spoon.schedule', []) as $mailbox => $cron) {
 
 ## Definition of Done
 
-- [ ] Расписание `imap:pull` по ящикам из конфига.
-- [ ] `withoutOverlapping` включён.
-- [ ] Инструкция по системному cron в README.
+- [x] Расписание `imap:pull` по ящикам из `.env`.
+- [x] `withoutOverlapping` включён.
+- [x] Инструкция по системному cron в README.
