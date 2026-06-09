@@ -1,59 +1,198 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Mailspoon
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+**Простое реле IMAP → HTTP-вебхук, совместимое с Mailgun.**
 
-## About Laravel
+Mailspoon подключается к обычному IMAP-ящику, следит за появлением новых писем и
+пересылает каждое входящее письмо на HTTP-эндпоинт, используя **тот же формат
+данных и схему подписи, что и входящие вебхуки Mailgun**. Это позволяет
+продолжать обрабатывать почту привычным Mailgun-эндпоинтом (например,
+[`laravel-mailbox`](https://github.com/beyondcode/laravel-mailbox)), даже когда
+письма приходят по обычному IMAP, а не через Mailgun.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Построено на [Laravel 13](https://laravel.com) и
+[ImapEngine](https://github.com/DirectoryTree/ImapEngine)
+(`directorytree/imapengine-laravel`).
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Как это работает
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+```
+IMAP-ящик ──(imap:pull / imap:sentry)──▶ событие MessageReceived
+       │
+       └─▶ слушатель NotifyNewMessage ──POST (body-mime + подпись Mailgun)──▶ ваш эндпоинт
+                   │
+                   └─▶ письмо помечается как прочитанное (\Seen)
+```
 
-## Learning Laravel
+1. Консольная команда забирает **непрочитанные** письма из папки ящика
+   (по умолчанию INBOX) и на каждое диспатчит событие `MessageReceived`
+   из `ImapEngine`.
+2. Слушатель `App\Listeners\NotifyNewMessage` превращает письмо в
+   form-запрос и отправляет POST на настроенный эндпоинт.
+3. После успешной пересылки письмо помечается прочитанным (`markSeen`), поэтому
+   повторно оно не отправляется.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+### Содержимое вебхука
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+Запрос отправляется как `application/x-www-form-urlencoded` и содержит
+следующие поля, повторяющие входящий MIME-вебхук Mailgun:
 
-## Laravel Sponsors
+| Поле         | Описание                                                                     |
+| ------------ | ---------------------------------------------------------------------------- |
+| `body-mime`  | Полный исходный MIME-текст письма.                                            |
+| `timestamp`  | Дата письма в виде Unix-метки (если её нет — текущее время).                  |
+| `token`      | Случайный hex-токен длиной 50 символов, уникальный для каждого запроса.       |
+| `signature`  | `HMAC-SHA256(timestamp + token, SPOON_KEY)` — проверяется на стороне получателя. |
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Проверяйте подпись на своей стороне так же, как для Mailgun:
+`hash_hmac('sha256', $timestamp . $token, $signingKey)`.
 
-### Premium Partners
+## Требования
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+- PHP 8.3+
+- IMAP-ящик
+- HTTP-эндпоинт для приёма пересылаемых писем
 
-## Contributing
+## Установка
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+git clone <repo-url> mailspoon
+cd mailspoon
 
-## Code of Conduct
+composer install
+cp .env.example .env
+php artisan key:generate
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Затем настройте IMAP-подключение и адрес для пересылки в `.env` (см. ниже).
 
-## Security Vulnerabilities
+## Конфигурация
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Все настройки задаются через переменные окружения.
 
-## License
+### IMAP-подключение (`config/imap.php`)
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```dotenv
+IMAP_HOST=imap.example.com
+IMAP_PORT=993
+IMAP_USERNAME=your-username
+IMAP_PASSWORD=your-password
+IMAP_ENCRYPTION=ssl          # ssl | tls | starttls | false
+```
+
+Дополнительные необязательные переменные: `IMAP_TIMEOUT`, `IMAP_DEBUG`,
+`IMAP_VALIDATE_CERT`, `IMAP_AUTHENTICATION`, а также настройки прокси
+(`IMAP_PROXY_SOCKET`, `IMAP_PROXY_USERNAME`, `IMAP_PROXY_PASSWORD`,
+`IMAP_PROXY_REQUEST_FULLURI`).
+
+В `config/imap.php` под ключом `mailboxes` можно описать несколько ящиков;
+встроенный называется `default`.
+
+### Адрес пересылки (`config/spoon.php`)
+
+```dotenv
+SPOON_ENDPOINT=https://example.com/laravel-mailbox/mailgun/mime
+SPOON_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
+```
+
+- `SPOON_ENDPOINT` — URL, который принимает пересылаемые письма.
+- `SPOON_KEY` — общий секрет для подписи каждого запроса.
+
+## Использование
+
+Mailspoon предоставляет три artisan-команды. Аргумент `mailbox` — это имя ящика
+из `config/imap.php` (для встроенного используйте `default`). Необязательный
+аргумент `folder` выбирает папку, отличную от INBOX.
+
+### `imap:pull` — разовая проверка
+
+Забирает все текущие непрочитанные письма, пересылает их и завершается.
+
+```bash
+php artisan imap:pull default
+php artisan imap:pull default "INBOX/Archive"
+```
+
+Опции:
+
+- `--with=` — список через запятую дополнительных частей письма для подгрузки.
+
+Подходит для запуска по расписанию (cron), когда долгоживущий процесс не нужен.
+
+### `imap:sentry` — забрать накопившееся и следить дальше
+
+Сначала один раз выполняет `imap:pull`, чтобы переслать накопившиеся письма,
+затем начинает следить за ящиком в реальном времени (через IMAP IDLE) и
+пересылает письма по мере поступления. Это рекомендуемый способ запускать
+Mailspoon как постоянный воркер.
+
+```bash
+php artisan imap:sentry default
+```
+
+Опции:
+
+- `--method=idle` — метод слежения (по умолчанию `idle`).
+- `--with=` — дополнительные части письма для подгрузки.
+- `--timeout=30` — таймаут IDLE в секундах.
+- `--attempts=5` — число попыток переподключения.
+- `--debug=false` — включить отладочный вывод.
+
+Запускайте под супервизором процессов (systemd, Supervisor и т. п.), чтобы он
+перезапускался автоматически:
+
+```ini
+[program:mailspoon]
+command=php /path/to/mailspoon/artisan imap:sentry default
+autostart=true
+autorestart=true
+```
+
+### `imap:watch` — только слежение
+
+Предоставляется ImapEngine; следит за новыми письмами без предварительного
+разбора накопившегося. `imap:sentry` — это удобная обёртка над
+`imap:pull` + `imap:watch`.
+
+## Связка с Laravel Mailbox
+
+Mailspoon отлично сочетается с
+[`beyondcode/laravel-mailbox`](https://github.com/beyondcode/laravel-mailbox).
+Поскольку Mailspoon шлёт запрос в точности так же, как входящий MIME-вебхук
+Mailgun, ваше приложение может принимать пересылаемые письма штатным
+mailgun-драйвером Laravel Mailbox — никакого кастомного кода для приёма не
+требуется.
+
+В приложении-получателе с установленным Laravel Mailbox:
+
+```dotenv
+MAILBOX_DRIVER=mailgun
+MAILBOX_MAILGUN_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
+```
+
+а в Mailspoon направьте реле на его эндпоинт и используйте **тот же ключ**, чтобы
+подписи совпадали:
+
+```dotenv
+SPOON_ENDPOINT=https://your-app.com/laravel-mailbox/mailgun/mime
+# SPOON_KEY должен совпадать с MAILBOX_MAILGUN_KEY
+SPOON_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
+```
+
+Дальше обрабатывайте письма как обычно через маршруты Laravel Mailbox:
+
+```php
+use BeyondCode\Mailbox\Facades\Mailbox;
+use BeyondCode\Mailbox\InboundEmail;
+
+Mailbox::from('sender@example.com', function (InboundEmail $email) {
+    $subject = $email->subject();
+    // ...
+});
+```
+
+Итоговый поток: `IMAP-ящик → Mailspoon → вебхук Mailgun → Laravel Mailbox → ваши обработчики`.
+
+## Лицензия
+
+Mailspoon распространяется по лицензии
+[MIT](https://opensource.org/licenses/MIT).
