@@ -58,4 +58,26 @@ return [
         ))),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Schedule
+    |--------------------------------------------------------------------------
+    |
+    | Optional cron schedule, run by `php artisan schedule:run`. `spoon:deliver`
+    | is scheduled by default since stored messages must be flushed in every
+    | mode. The `pull` map lets you poll mailboxes with `imap:pull` instead of
+    | running a long-lived `imap:sentry` watcher; it is empty by default. Set a
+    | cron value to empty to disable a task.
+    |
+    */
+
+    'schedule' => [
+        'deliver' => env('SPOON_DELIVER_CRON', '* * * * *'),
+
+        // Mailbox name => cron expression, e.g. 'default' => '*/5 * * * *'.
+        'pull' => [
+            //
+        ],
+    ],
+
 ];

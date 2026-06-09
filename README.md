@@ -227,10 +227,58 @@ php artisan spoon:deliver --limit=100 --max-attempts=5
 - `--limit=50` — максимум писем за один запуск.
 - `--max-attempts=` — переопределить `SPOON_MAX_ATTEMPTS`.
 
-Запускайте периодически — через системный cron или планировщик Laravel:
+Команда — разовая (one-shot); запускать её периодически проще всего встроенным
+планировщиком (см. ниже), который уже вызывает `spoon:deliver` с
+`withoutOverlapping()`.
+
+## Запуск и расписание
+
+В Mailspoon встроен планировщик. Достаточно одной строки системного cron:
 
 ```cron
-* * * * * cd /path/to/mailspoon && php artisan spoon:deliver >> /dev/null 2>&1
+* * * * * cd /path/to/mailspoon && php artisan schedule:run >> /dev/null 2>&1
+```
+
+`schedule:run` сам вызывает запланированные задачи (с `withoutOverlapping()`,
+чтобы длинный запуск не накладывался на следующий тик). Что именно планируется,
+задаётся в `config/spoon.php` → `schedule`:
+
+- **`spoon:deliver`** — включён по умолчанию (`SPOON_DELIVER_CRON`, по умолчанию
+  каждую минуту). Нужен в любом режиме, поскольку чтение только **сохраняет**
+  письма. Чтобы отключить — задайте `SPOON_DELIVER_CRON` пустым.
+- **`imap:pull` по ящикам** — карта `schedule.pull` (`имя ящика => cron`), по
+  умолчанию пустая.
+
+Отсюда два режима эксплуатации:
+
+| Режим | Чтение | Демон / supervisor | Латентность |
+| ----- | ------ | ------------------ | ----------- |
+| **Cron-poll** | `imap:pull` по `schedule.pull` | не нужен | = интервал cron |
+| **Realtime** | `imap:sentry` (IMAP IDLE) под supervisor | нужен для watcher | секунды |
+
+В обоих режимах доставку выполняет запланированный `spoon:deliver` —
+отдельный демон или очередь для неё не требуются.
+
+**Cron-poll** (без долгоживущих процессов) — добавьте ящики в `schedule.pull`:
+
+```php
+// config/spoon.php
+'schedule' => [
+    'deliver' => env('SPOON_DELIVER_CRON', '* * * * *'),
+    'pull' => [
+        'default' => '*/5 * * * *',
+    ],
+],
+```
+
+**Realtime** — держите `imap:sentry` под супервизором; `spoon:deliver` при этом
+по-прежнему запускается планировщиком:
+
+```ini
+[program:mailspoon]
+command=php /path/to/mailspoon/artisan imap:sentry default
+autostart=true
+autorestart=true
 ```
 
 ## Связка с Laravel Mailbox
