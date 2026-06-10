@@ -1,15 +1,15 @@
 <?php
 
-namespace App\Listeners;
+namespace TTBooking\Mailspoon\Listeners;
 
-use App\Models\RelayedMessage;
-use App\Support\ArchiveStorage;
 use Carbon\CarbonInterface;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Container\Attributes\Config;
 use Illuminate\Support\Str;
 use Throwable;
+use TTBooking\Mailspoon\Models\RelayedMessage;
+use TTBooking\Mailspoon\Support\ArchiveStorage;
 use UnexpectedValueException;
 
 /**
@@ -18,14 +18,14 @@ use UnexpectedValueException;
  * Reading the mailbox is intentionally decoupled from webhook delivery: once
  * the raw message is archived and a delivery record is created, the message is
  * marked as seen so the single-threaded reader is never blocked by a slow or
- * failing endpoint. Actual delivery is handled out-of-band by `spoon:deliver`.
+ * failing endpoint. Actual delivery is handled out-of-band by `mailspoon:deliver`.
  */
 class StoreIncomingMessage
 {
     public function __construct(
-        #[Config('spoon.endpoint')] protected string $endpoint,
-        #[Config('spoon.archive.disk')] protected string $disk,
-        #[Config('spoon.archive.path')] protected string $basePath,
+        #[Config('mailspoon.endpoint')] protected string $endpoint,
+        #[Config('mailspoon.archive.disk')] protected string $disk,
+        #[Config('mailspoon.archive.path')] protected string $basePath,
     ) {}
 
     /**

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace App\Models;
+namespace TTBooking\Mailspoon\Models;
 
-use App\Support\ArchiveStorage;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Support\Str;
+use TTBooking\Mailspoon\Support\ArchiveStorage;
 
 final class RelayedMessage extends Model
 {
@@ -39,7 +39,7 @@ final class RelayedMessage extends Model
      */
     public function prunable(): Builder
     {
-        $days = max(0, (int) config('spoon.retention.days', 0));
+        $days = max(0, (int) config('mailspoon.retention.days', 0));
         $cutoff = now()->subDays($days);
 
         if ($days === 0) {
@@ -115,7 +115,7 @@ final class RelayedMessage extends Model
             return;
         }
 
-        $storage = ArchiveStorage::disk(config('spoon.archive.disk'));
+        $storage = ArchiveStorage::disk(config('mailspoon.archive.disk'));
 
         if ($storage->exists($this->archive_path)) {
             $storage->delete($this->archive_path);

@@ -1,11 +1,11 @@
 <?php
 
-use App\Listeners\StoreIncomingMessage;
-use App\Models\RelayedMessage;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
+use TTBooking\Mailspoon\Listeners\StoreIncomingMessage;
+use TTBooking\Mailspoon\Models\RelayedMessage;
 
 uses(RefreshDatabase::class);
 

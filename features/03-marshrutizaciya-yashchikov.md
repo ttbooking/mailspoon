@@ -1,79 +1,230 @@
 # 03. Маршрутизация ящиков → эндпоинтов
 
-**Приоритет:** 🟡 средний · **Трудоёмкость:** M
+**Приоритет:** 🟡 средний · **Трудоёмкость:** фаза 1 — M, фаза 2 — M
+
+> Актуализировано под store-and-forward (2.x) и разрезано на две фазы:
+> **фаза 1** — маршрутизация один-к-одному (реализуем сейчас), **фаза 2** —
+> fan-out на несколько приложений (отложена до реальной потребности, YAGNI;
+> поглощает [#13](13-fan-out-endpointy.md)). Схема БД готовится под фазу 2
+> сразу, чтобы не делать вторую ломающую миграцию.
+>
+> ⛔ **Зависит от [#21](21-paket-laravel.md) (Laravel-пакет):** карту маршрутов
+> с эндпоинтами и ключами в env-JSON не делаем — сначала пакет с публикуемым
+> конфигом, потом маршруты обычным PHP-массивом поверх него.
 
 ## Проблема
 
-`config/spoon.php` задаёт **один** глобальный `endpoint` и `key`:
+`config/mailspoon.php` задаёт **один** глобальный `endpoint` и `key`:
 
 ```php
-'endpoint' => env('SPOON_ENDPOINT'),
-'key' => env('SPOON_KEY'),
+'endpoint' => env('MAILSPOON_ENDPOINT'),
+'key' => env('MAILSPOON_KEY'),
 ```
 
 При этом `config/imap.php` уже поддерживает несколько ящиков (`mailboxes`).
 Сейчас все ящики неизбежно пересылаются на один и тот же URL с одним ключом —
 нельзя, например, `support@` слать в один сервис, а `billing@` — в другой.
 
+Отдельная (отложенная) потребность: один общий ящик могут обслуживать
+**несколько** приложений (CRM и helpdesk читают общий `inbox@`). Обходного
+пути у этого сценария нет: прописать один IMAP-аккаунт двумя ящиками в конфиге
+не сработает — кто первый прочитал, тот пометил `\Seen`, второй письмо не
+увидит. Если потребность возникнет, делать придётся в mailspoon (фаза 2).
+
 ## Цель
 
-Привязать каждый ящик (и при желании папку) к своему эндпоинту и ключу
-подписи, сохранив обратную совместимость с одиночной конфигурацией.
+Привязать каждый ящик к своему эндпоинту и ключу подписи, сохранив обратную
+совместимость с одиночной конфигурацией. Заложить схему данных так, чтобы
+fan-out добавлялся позже без ломающей миграции.
 
-## Предлагаемое решение
+## Контекст 2.x: где живёт маршрут
 
-Карта маршрутов в `config/spoon.php`:
+После перехода на store-and-forward доставка разнесена на две фазы, и маршрут
+распределяется между ними:
+
+- **Endpoint резолвится при захвате.** `StoreIncomingMessage` уже пишет
+  `endpoint` в каждую запись `relayed_messages` — нужно лишь выбирать его по
+  ящику вместо глобального конфига. Endpoint фиксируется на момент получения
+  письма (аудит: видно, куда письмо было адресовано).
+- **Ключ подписи резолвится при доставке.** `mailspoon:deliver` сейчас подписывает
+  всё одним `mailspoon.key`. Ключ **не** хранится в БД (секрет; ротация должна
+  действовать и на pending-письма) — он выбирается по колонкам
+  `mailbox` + `target` в момент POST'а, с откатом на глобальный `mailspoon.key`.
+
+---
+
+## Фаза 1: маршрутизация один-к-одному (реализуем)
+
+Карта маршрутов в `config/mailspoon.php`, ключ — **имя ящика** из `config/imap.php`:
 
 ```php
 return [
     // дефолт (back-compat)
-    'endpoint' => env('SPOON_ENDPOINT'),
-    'key' => env('SPOON_KEY'),
+    'endpoint' => env('MAILSPOON_ENDPOINT'),
+    'key' => env('MAILSPOON_KEY'),
 
     'routes' => [
         'support' => [                       // имя ящика из config/imap.php
-            'endpoint' => env('SPOON_SUPPORT_ENDPOINT'),
-            'key' => env('SPOON_SUPPORT_KEY'),
+            'endpoint' => env('MAILSPOON_SUPPORT_ENDPOINT'),
+            'key' => env('MAILSPOON_SUPPORT_KEY'),
         ],
         'billing' => [
-            'endpoint' => env('SPOON_BILLING_ENDPOINT'),
-            'key' => env('SPOON_BILLING_KEY'),
+            'endpoint' => env('MAILSPOON_BILLING_ENDPOINT'),
+            'key' => env('MAILSPOON_BILLING_KEY'),
         ],
     ],
 ];
 ```
 
-`MessageReceived` от ImapEngine несёт имя ящика/папки — listener выбирает
-маршрут по нему, с откатом на глобальный `endpoint/key`:
+### Проброс имени ящика
+
+Событие `MessageReceived` несёт только `$message`, а `Mailbox` в ImapEngine
+создаётся из массива конфига и **своего имени не знает** (`ImapManager::build`).
+`$folder->mailbox()->config('username')` возвращает IMAP-логин, а не имя из
+`config/imap.php` — ключевать маршруты им нельзя.
+
+Имя ящика знают команды (`mailspoon:pull {mailbox}`, `mailspoon:sentry {mailbox}`) —
+пробрасываем его в listener через `Context`:
 
 ```php
-$route = config("spoon.routes.{$event->mailbox}", [
-    'endpoint' => $this->endpoint,
-    'key' => $this->key,
-]);
+// в mailspoon:pull и mailspoon:sentry, до выборки/IDLE
+Context::add('mailspoon.mailbox', $mailboxName);
+
+// в StoreIncomingMessage
+$name = Context::get('mailspoon.mailbox');
+
+$endpoint = config("mailspoon.routes.{$name}.endpoint") ?? $this->endpoint;
 ```
 
-> Уточнить, как `MessageReceived` отдаёт имя ящика (свойство события либо через
-> `$message->mailbox()`); при необходимости пробрасывать имя из команды.
+`mailspoon:sentry` вызывает `imap:watch` in-process (`$this->call()`), поэтому
+контекст, установленный в sentry, действует и для IDLE-событий.
 
-## Изменения конфигурации
+Колонка `mailbox` начинает хранить имя ящика (а не username, как сейчас).
+IMAP-логин при желании сохраняем отдельно (новая nullable-колонка `account`).
+
+Ключ при доставке (изменение в `mailspoon:deliver` — одна строка):
+
+```php
+$key = config("mailspoon.routes.{$message->mailbox}.key") ?? $this->key;
+```
+
+### Схема БД: задел под фазу 2
+
+Сейчас `fingerprint` глобально уникален — письмо с CC на два ящика дойдёт
+только до первого эндпоинта. Миграция фазы 1:
+
+- колонка `target` (string, default `'default'`) — в фазе 1 всегда `default`;
+- `unique(['mailbox', 'target', 'fingerprint'])` вместо `unique('fingerprint')`;
+- проверка дубля в listener — по той же тройке;
+- ящик добавляется в путь архива (`{basePath}/{mailbox}/{Y/m/d}/...`), чтобы
+  копии из разных ящиков не перезаписывали друг друга.
+
+Поведения это не меняет, зато фаза 2 становится чисто аддитивной.
+
+### Изменения конфигурации
 
 ```dotenv
-SPOON_SUPPORT_ENDPOINT=https://app/.../mime
-SPOON_SUPPORT_KEY=key-...
-SPOON_BILLING_ENDPOINT=https://other/.../mime
-SPOON_BILLING_KEY=key-...
+MAILSPOON_SUPPORT_ENDPOINT=https://app/.../mime
+MAILSPOON_SUPPORT_KEY=key-...
+MAILSPOON_BILLING_ENDPOINT=https://other/.../mime
+MAILSPOON_BILLING_KEY=key-...
 ```
+
+### Definition of Done (фаза 1)
+
+- [ ] Письмо сохраняется с эндпоинтом, соответствующим его ящику, и
+      доставляется на него.
+- [ ] `mailspoon:deliver` подписывает запрос ключом маршрута; ключи не хранятся в БД.
+- [ ] Откат на глобальный `endpoint/key`, если маршрут не задан (back-compat).
+- [ ] Колонка `mailbox` хранит имя ящика из `config/imap.php`; колонка `target`
+      (= `default`) и уникальный индекс `(mailbox, target, fingerprint)`
+      заложены миграцией.
+- [ ] Тест: два ящика → два разных `Http::fake()`-адреса с разными подписями.
+- [ ] Тест: одно письмо в двух ящиках доставляется на оба эндпоинта.
+
+---
+
+## Фаза 2: fan-out на несколько приложений (отложена)
+
+**Не реализуем, пока не появится реальный сценарий.** Описание сохранено,
+чтобы фаза 1 не противоречила будущему дизайну.
+
+Маршрут получает один или несколько **именованных таргетов**; одиночная форма
+фазы 1 нормализуется в таргет `default`:
+
+```php
+'routes' => [
+    // fan-out: общий ящик, письмо получают оба приложения
+    'support' => [
+        'crm' => [
+            'endpoint' => env('MAILSPOON_SUPPORT_CRM_ENDPOINT'),
+            'key' => env('MAILSPOON_SUPPORT_CRM_KEY'),
+        ],
+        'helpdesk' => [
+            'endpoint' => env('MAILSPOON_SUPPORT_HELPDESK_ENDPOINT'),
+            'key' => env('MAILSPOON_SUPPORT_HELPDESK_KEY'),
+        ],
+    ],
+],
+```
+
+### Запись на каждый таргет
+
+Статусы доставки независимы: CRM может принять письмо, а helpdesk — лежать.
+Listener создаёт **по записи `relayed_messages` на каждый таргет** (одно письмо
+в `support` с двумя таргетами → две записи). Каждая запись живёт своим циклом
+`pending → delivered/failed` со своими ретраями и backoff — `mailspoon:deliver`
+менять не нужно, он уже обрабатывает записи независимо. Ключ подписи:
+
+```php
+$key = config("mailspoon.routes.{$message->mailbox}.{$message->target}.key")
+    ?? $this->key;
+```
+
+Все записи одного письма ссылаются на **один** архивный `.eml`
+(`archive_path` совпадает) — сырой MIME не дублируется. Дедупликация по тройке
+`(mailbox, target, fingerprint)` уже заложена в фазе 1.
+
+### Retention и общий архив
+
+Главная сложность фазы 2 (и причина, по которой она отложена). `pruning()` в
+`RelayedMessage` удаляет `.eml` вместе с записью; при fan-out один файл делят
+несколько записей — удалять его можно только когда удаляется **последняя**
+ссылающаяся запись:
+
+```php
+$shared = self::query()
+    ->where('archive_path', $this->archive_path)
+    ->whereKeyNot($this->getKey())
+    ->exists();
+```
+
+Иначе prune доставленной CRM-записи снесёт архив, который ещё нужен
+недоставленной helpdesk-записи. В фазе 1 таргет один на письмо, `archive_path`
+не разделяется — prune остаётся как есть.
+
+### Definition of Done (фаза 2)
+
+- [ ] Нормализация конфига: одиночная форма ≡ таргет `default` (back-compat
+      с фазой 1 без миграций).
+- [ ] Fan-out: ящик с несколькими таргетами создаёт запись на каждый; статусы
+      и ретраи независимы, сырой MIME архивируется один раз.
+- [ ] Prune удаляет общий `.eml` только вместе с последней ссылающейся записью.
+- [ ] Тест: fan-out — отказ одного таргета не мешает доставке на второй.
+- [ ] Тест: prune доставленной записи не трогает архив, пока жива
+      недоставленная запись-сосед.
+
+---
 
 ## Замечания
 
+- Back-compat: без `routes` (или для ящика без маршрута) поведение в точности
+  сегодняшнее — глобальные `MAILSPOON_ENDPOINT`/`MAILSPOON_KEY`.
+- Endpoint зафиксирован в записи на момент захвата; ключ берётся из конфига на
+  момент доставки. Следствие: ротация ключа действует на pending-письма сразу,
+  а смена endpoint — только на новые письма (старые доедут на прежний адрес).
 - Хорошо сочетается с #04 (фильтрация) — правила можно держать на уровне
   маршрута.
-- Запуск нескольких воркеров: по одному `imap:sentry <mailbox>` на ящик под
-  supervisor (см. #09).
-
-## Definition of Done
-
-- [ ] Письмо пересылается на эндпоинт, соответствующий его ящику.
-- [ ] Откат на глобальный `endpoint/key`, если маршрут не задан.
-- [ ] Тест: два ящика → два разных `Http::fake()`-адреса.
+- Запуск нескольких воркеров: по одному `mailspoon:sentry <mailbox>` на ящик под
+  supervisor (см. #09) либо cron-poll через карту `mailspoon.schedule.pull`
+  в опубликованном конфиге (#16, #21).

@@ -34,7 +34,7 @@ return new class extends Migration
             $table->text('last_error')->nullable();
 
             // When a failed message becomes eligible for the next delivery
-            // attempt (back-off between `spoon:deliver` runs).
+            // attempt (back-off between `mailspoon:deliver` runs).
             $table->timestamp('next_attempt_at')->nullable()->index();
 
             // Location of the archived raw MIME on the storage disk.

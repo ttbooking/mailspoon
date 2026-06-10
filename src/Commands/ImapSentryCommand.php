@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Console\Commands;
+namespace TTBooking\Mailspoon\Commands;
 
 use Illuminate\Console\Command;
 use Symfony\Component\Console\Attribute\AsCommand;
 
-#[AsCommand(name: 'imap:sentry')]
+#[AsCommand(name: 'mailspoon:sentry')]
 class ImapSentryCommand extends Command
 {
     /**
@@ -13,7 +13,7 @@ class ImapSentryCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'imap:sentry {mailbox} {folder?} {--method=idle} {--with=} {--timeout=30} {--attempts=5} {--debug=false}';
+    protected $signature = 'mailspoon:sentry {mailbox} {folder?} {--method=idle} {--with=} {--timeout=30} {--attempts=5} {--debug=false}';
 
     /**
      * The console command description.
@@ -29,7 +29,7 @@ class ImapSentryCommand extends Command
     {
         $with = implode(',', ImapPullCommand::messageParts($this->option('with')));
 
-        $this->call('imap:pull', [
+        $this->call('mailspoon:pull', [
             'mailbox' => $this->argument('mailbox'),
             'folder' => $this->argument('folder'),
             '--with' => $with,

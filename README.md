@@ -1,6 +1,6 @@
 # Mailspoon
 
-**Простое реле IMAP → HTTP-вебхук, совместимое с Mailgun.**
+**Простое реле IMAP → HTTP-вебхук, совместимое с Mailgun. Пакет для Laravel.**
 
 Mailspoon подключается к обычному IMAP-ящику, следит за появлением новых писем и
 пересылает каждое входящее письмо на HTTP-эндпоинт, используя **тот же формат
@@ -9,7 +9,8 @@ Mailspoon подключается к обычному IMAP-ящику, след
 [`laravel-mailbox`](https://github.com/beyondcode/laravel-mailbox)), даже когда
 письма приходят по обычному IMAP, а не через Mailgun.
 
-Построено на [Laravel 13](https://laravel.com) и
+Устанавливается composer-пакетом в любое приложение
+[Laravel 13](https://laravel.com); чтение почты — на базе
 [ImapEngine](https://github.com/DirectoryTree/ImapEngine)
 (`directorytree/imapengine-laravel`).
 
@@ -20,13 +21,13 @@ Mailspoon работает по схеме **store-and-forward**: чтение �
 однопоточное чтение почты.
 
 ```
-IMAP-ящик ──(imap:pull / imap:sentry)──▶ событие MessageReceived
+IMAP-ящик ──(mailspoon:pull / mailspoon:sentry)──▶ событие MessageReceived
        │
        └─▶ StoreIncomingMessage: архивирует сырой MIME + создаёт запись (pending)
                    │
                    └─▶ письмо сразу помечается прочитанным (\Seen)
 
-spoon:deliver (отдельно, по cron/в цикле)
+mailspoon:deliver (отдельно, по планировщику)
        │
        └─▶ берёт pending из хранилища ──POST (body-mime + подпись Mailgun)──▶ ваш эндпоинт
                    │
@@ -35,12 +36,12 @@ spoon:deliver (отдельно, по cron/в цикле)
 
 1. Команда забирает **непрочитанные** письма из папки ящика (по умолчанию INBOX)
    и на каждое диспатчит событие `MessageReceived` из `ImapEngine`.
-2. Слушатель `App\Listeners\StoreIncomingMessage` сохраняет сырой MIME в
-   хранилище, создаёт запись о письме со статусом `pending` и **сразу** помечает
-   письмо прочитанным — приём надёжно зафиксирован локально.
-3. Команда `spoon:deliver` независимо разбирает `pending`-записи и шлёт POST на
-   эндпоинт. Успех → `delivered`; ошибка → `attempts++` и `failed`, письмо
-   переотправится на следующем запуске (до `SPOON_MAX_ATTEMPTS`).
+2. Слушатель `StoreIncomingMessage` сохраняет сырой MIME в хранилище, создаёт
+   запись о письме со статусом `pending` и **сразу** помечает письмо
+   прочитанным — приём надёжно зафиксирован локально.
+3. Команда `mailspoon:deliver` независимо разбирает `pending`-записи и шлёт POST
+   на эндпоинт. Успех → `delivered`; ошибка → `attempts++` и `failed`, письмо
+   переотправится на следующем запуске (до `MAILSPOON_MAX_ATTEMPTS`).
 
 Дедупликация по `Message-Id` (или хешу письма, если заголовка нет) исключает
 повторную обработку одного и того же сообщения.
@@ -55,7 +56,7 @@ spoon:deliver (отдельно, по cron/в цикле)
 | `body-mime`  | Полный исходный MIME-текст письма.                                            |
 | `timestamp`  | Unix-метка момента отправки вебхука.                                          |
 | `token`      | Случайный hex-токен длиной 50 символов, уникальный для каждого запроса.       |
-| `signature`  | `HMAC-SHA256(timestamp + token, SPOON_KEY)` — проверяется на стороне получателя. |
+| `signature`  | `HMAC-SHA256(timestamp + token, MAILSPOON_KEY)` — проверяется на стороне получателя. |
 
 Проверяйте подпись на своей стороне так же, как для Mailgun:
 `hash_hmac('sha256', $timestamp . $token, $signingKey)`.
@@ -63,31 +64,48 @@ spoon:deliver (отдельно, по cron/в цикле)
 ## Требования
 
 - PHP 8.3+
+- Приложение Laravel 13 (хост)
 - IMAP-ящик
 - HTTP-эндпоинт для приёма пересылаемых писем
-- База данных (по умолчанию SQLite) — хранит записи о письмах и статус доставки
-- Диск хранилища (`config/filesystems.php`) — для архива сырого MIME
+- База данных — хранит записи о письмах и статус доставки
+- Диск хранилища (`config/filesystems.php`) с `'throw' => true` — для архива
+  сырого MIME
 
 ## Установка
 
 ```bash
-git clone <repo-url> mailspoon
-cd mailspoon
+composer require ttbooking/mailspoon
 
-composer install
-cp .env.example .env
-php artisan key:generate
+# конфиг Mailspoon → config/mailspoon.php
+php artisan vendor:publish --tag=mailspoon-config
 
-# создать БД (для SQLite) и применить миграции
-touch database/database.sqlite
+# конфиг IMAP-подключений → config/imap.php
+php artisan vendor:publish --provider="DirectoryTree\ImapEngine\Laravel\ImapServiceProvider"
+
 php artisan migrate
 ```
 
-Затем настройте IMAP-подключение и адрес для пересылки в `.env` (см. ниже).
+Миграции пакета применяются автоматически; при желании их можно скопировать в
+приложение: `php artisan vendor:publish --tag=mailspoon-migrations`.
+
+### Диск архива: обязателен `'throw' => true`
+
+Архив `.eml` — единственная копия письма после пометки прочитанным, поэтому
+ошибки записи/чтения/удаления не должны подавляться Flysystem. Mailspoon
+**отказывается работать** с диском, у которого `'throw' => false` (значение по
+умолчанию в свежем Laravel). Включите его для выбранного диска в
+`config/filesystems.php`:
+
+```php
+'local' => [
+    'driver' => 'local',
+    'root' => storage_path('app/private'),
+    'serve' => true,
+    'throw' => true,
+],
+```
 
 ## Конфигурация
-
-Все настройки задаются через переменные окружения.
 
 ### IMAP-подключение (`config/imap.php`)
 
@@ -107,90 +125,104 @@ IMAP_ENCRYPTION=ssl          # ssl | tls | starttls | false
 В `config/imap.php` под ключом `mailboxes` можно описать несколько ящиков;
 встроенный называется `default`.
 
-### Адрес пересылки (`config/spoon.php`)
+### Адрес пересылки (`config/mailspoon.php`)
 
 ```dotenv
-SPOON_ENDPOINT=https://example.com/laravel-mailbox/mailgun/mime
-SPOON_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
+MAILSPOON_ENDPOINT=https://example.com/laravel-mailbox/mailgun/mime
+MAILSPOON_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
 ```
 
-- `SPOON_ENDPOINT` — URL, который принимает пересылаемые письма.
-- `SPOON_KEY` — общий секрет для подписи каждого запроса.
+- `MAILSPOON_ENDPOINT` — URL, который принимает пересылаемые письма.
+- `MAILSPOON_KEY` — общий секрет для подписи каждого запроса.
 
-### Хранилище и доставка (`config/spoon.php`)
+### Хранилище и доставка (`config/mailspoon.php`)
 
 ```dotenv
-SPOON_ARCHIVE_DISK=local       # диск из config/filesystems.php для сырого MIME
-SPOON_ARCHIVE_PATH=mailspoon   # префикс пути внутри диска
-SPOON_RETENTION_DAYS=3         # срок хранения записей и MIME; 0 отключает очистку
-SPOON_PRUNE_CRON="0 3 * * *"   # расписание очистки при включённом retention
-SPOON_PULL_SCHEDULE='{"default":"*/5 * * * *"}'
+MAILSPOON_ARCHIVE_DISK=local       # диск из config/filesystems.php для сырого MIME
+MAILSPOON_ARCHIVE_PATH=mailspoon   # префикс пути внутри диска
+MAILSPOON_RETENTION_DAYS=3         # срок хранения записей и MIME; 0 отключает очистку
+MAILSPOON_PRUNE_CRON="0 3 * * *"   # расписание очистки при включённом retention
 
-SPOON_TIMEOUT=15               # общий таймаут запроса доставки, сек
-SPOON_CONNECT_TIMEOUT=3        # таймаут на TCP-handshake, сек (не выше нескольких секунд)
-SPOON_TRIES=3                  # быстрых in-process повторов на одну попытку
-SPOON_BACKOFF=60,300,900,3600  # пауза между запусками, сек, по номеру попытки
-SPOON_MAX_ATTEMPTS=10          # сколько попыток доставки, прежде чем сдаться
+MAILSPOON_TIMEOUT=15               # общий таймаут запроса доставки, сек
+MAILSPOON_CONNECT_TIMEOUT=3        # таймаут на TCP-handshake, сек
+MAILSPOON_TRIES=3                  # быстрых in-process повторов на одну попытку
+MAILSPOON_BACKOFF=60,300,900,3600  # пауза между запусками, сек, по номеру попытки
+MAILSPOON_MAX_ATTEMPTS=10          # сколько попыток доставки, прежде чем сдаться
 ```
 
-- `SPOON_ARCHIVE_DISK` / `SPOON_ARCHIVE_PATH` — куда складывается архив `.eml`.
-  Выбранный диск в `config/filesystems.php` обязан иметь `'throw' => true`,
-  чтобы ошибки записи, чтения и удаления не подавлялись Flysystem.
-- `SPOON_RETENTION_DAYS` — сколько дней хранить завершённые записи вместе с
+- `MAILSPOON_ARCHIVE_DISK` / `MAILSPOON_ARCHIVE_PATH` — куда складывается архив
+  `.eml`; диск обязан иметь `'throw' => true` (см. выше).
+- `MAILSPOON_RETENTION_DAYS` — сколько дней хранить завершённые записи вместе с
   `.eml`; по умолчанию `3`, значение `0` отключает автоматическую очистку.
-- `SPOON_PRUNE_CRON` — расписание штатной команды Laravel `model:prune`.
-- `SPOON_PULL_SCHEDULE` — JSON-объект `имя ящика => cron` для режима
-  cron-poll. Пустое значение или `{}` отключает периодический `imap:pull`.
-- `SPOON_TIMEOUT` / `SPOON_CONNECT_TIMEOUT` — общий таймаут запроса и отдельный
-  лимит на установление TCP-соединения, чтобы зависший handshake не подвешивал
-  воркер.
-- `SPOON_TRIES` — короткие повторы внутри одной попытки для мгновенных блипов
-  (сеть, 5xx, 429); постоянные 4xx не повторяются.
-- `SPOON_BACKOFF` — растущая пауза между запусками `spoon:deliver`: упавшее
-  письмо берётся повторно только после задержки, соответствующей номеру попытки
-  (последнее значение применяется для всех дальнейших).
-- `SPOON_MAX_ATTEMPTS` — после стольких неудачных попыток письмо перестаёт
+- `MAILSPOON_PRUNE_CRON` — расписание штатной команды Laravel `model:prune`.
+- `MAILSPOON_TIMEOUT` / `MAILSPOON_CONNECT_TIMEOUT` — общий таймаут запроса и
+  отдельный лимит на установление TCP-соединения, чтобы зависший handshake не
+  подвешивал воркер.
+- `MAILSPOON_TRIES` — короткие повторы внутри одной попытки для мгновенных
+  блипов (сеть, 5xx, 429); постоянные 4xx не повторяются.
+- `MAILSPOON_BACKOFF` — растущая пауза между запусками `mailspoon:deliver`:
+  упавшее письмо берётся повторно только после задержки, соответствующей номеру
+  попытки (последнее значение применяется для всех дальнейших).
+- `MAILSPOON_MAX_ATTEMPTS` — после стольких неудачных попыток письмо перестаёт
   переотправляться и остаётся в статусе `failed` для ручного разбора.
+
+### Карты — в опубликованном конфиге
+
+Структурные настройки (например, расписание cron-poll по ящикам) задаются
+обычным PHP в `config/mailspoon.php` — без сериализации в env:
+
+```php
+'schedule' => [
+    // ...
+    'pull' => [
+        'default' => '*/5 * * * *',
+        'secondary' => '0 * * * *',
+    ],
+],
+```
+
+Опубликованный конфиг должен сохранять полную структуру секций: merge с
+дефолтами пакета выполняется только по верхнему уровню.
 
 ## Использование
 
-Mailspoon предоставляет команды чтения (`imap:*`) и команду доставки
-(`spoon:deliver`). Аргумент `mailbox` — это имя ящика из `config/imap.php` (для
-встроенного используйте `default`). Необязательный аргумент `folder` выбирает
-папку, отличную от INBOX.
+Mailspoon предоставляет команды чтения (`mailspoon:pull`, `mailspoon:sentry`)
+и команду доставки (`mailspoon:deliver`). Аргумент `mailbox` — это имя ящика из
+`config/imap.php` (для встроенного используйте `default`). Необязательный
+аргумент `folder` выбирает папку, отличную от INBOX.
 
-### `imap:pull` — разовая проверка
+### `mailspoon:pull` — разовая проверка
 
-Забирает все текущие непрочитанные письма, пересылает их и завершается.
+Забирает все текущие непрочитанные письма, сохраняет их и завершается.
 
 ```bash
-php artisan imap:pull default
-php artisan imap:pull default "INBOX/Archive"
+php artisan mailspoon:pull default
+php artisan mailspoon:pull default "INBOX/Archive"
 ```
 
 Опции:
 
-- `--with=` — список через запятую дополнительных частей письма для подгрузки.
-  Если опция не задана или пуста, используются `flags,headers,body`, необходимые
-  для сохранения полного сырого MIME.
+- `--with=` — список через запятую частей письма для подгрузки. Если опция не
+  задана или пуста, используются `flags,headers,body`, необходимые для
+  сохранения полного сырого MIME.
 
 Подходит для запуска по расписанию (cron), когда долгоживущий процесс не нужен.
 
-### `imap:sentry` — забрать накопившееся и следить дальше
+### `mailspoon:sentry` — забрать накопившееся и следить дальше
 
-Сначала один раз выполняет `imap:pull`, чтобы переслать накопившиеся письма,
-затем начинает следить за ящиком в реальном времени (через IMAP IDLE) и
-пересылает письма по мере поступления. Это рекомендуемый способ запускать
+Сначала один раз выполняет `mailspoon:pull`, чтобы сохранить накопившиеся
+письма, затем начинает следить за ящиком в реальном времени (через IMAP IDLE) и
+сохраняет письма по мере поступления. Это рекомендуемый способ запускать
 Mailspoon как постоянный воркер.
 
 ```bash
-php artisan imap:sentry default
+php artisan mailspoon:sentry default
 ```
 
 Опции:
 
 - `--method=idle` — метод слежения (по умолчанию `idle`).
-- `--with=` — дополнительные части письма для подгрузки.
+- `--with=` — части письма для подгрузки (по умолчанию `flags,headers,body`).
 - `--timeout=30` — таймаут IDLE в секундах.
 - `--attempts=5` — число попыток переподключения.
 - `--debug=false` — включить отладочный вывод.
@@ -200,113 +232,93 @@ php artisan imap:sentry default
 
 ```ini
 [program:mailspoon]
-command=php /path/to/mailspoon/artisan imap:sentry default --with=flags,headers,body
+command=php /path/to/app/artisan mailspoon:sentry default
 autostart=true
 autorestart=true
 ```
 
-### `imap:watch` — только слежение
+> Команда `imap:watch` (только слежение, без предварительного разбора)
+> предоставляется самим ImapEngine; `mailspoon:sentry` — это обёртка над
+> `mailspoon:pull` + `imap:watch`.
 
-Предоставляется ImapEngine; следит за новыми письмами без предварительного
-разбора накопившегося. `imap:sentry` — это удобная обёртка над
-`imap:pull` + `imap:watch`.
+> Команды чтения только **сохраняют** письма (архив + запись `pending`) и
+> помечают их прочитанными. Сама доставка на эндпоинт выполняется отдельно —
+> командой `mailspoon:deliver`.
 
-> Команды `imap:*` теперь только **сохраняют** письма (архив + запись `pending`)
-> и помечают их прочитанными. Сама доставка на эндпоинт выполняется отдельно —
-> командой `spoon:deliver`.
-
-### `spoon:deliver` — доставка сохранённых писем
+### `mailspoon:deliver` — доставка сохранённых писем
 
 Разбирает `pending`-записи (и ранее проваленные, у которых прошёл backoff и не
 исчерпан лимит попыток), читает сырой MIME из архива и шлёт подписанный POST на
 эндпоинт. Ретрай двухуровневый:
 
-- **внутри попытки** — короткие повторы (`SPOON_TRIES`) для мгновенных сетевых
-  блипов и ответов 5xx/429, с ограничением таймаутов (`SPOON_TIMEOUT`,
-  `SPOON_CONNECT_TIMEOUT`);
-- **между запусками** — упавшее письмо переносится на потом через `next_attempt_at`
-  по расписанию `SPOON_BACKOFF`, без блокирующих пауз в воркере.
+- **внутри попытки** — короткие повторы (`MAILSPOON_TRIES`) для мгновенных
+  сетевых блипов и ответов 5xx/429, с ограничением таймаутов
+  (`MAILSPOON_TIMEOUT`, `MAILSPOON_CONNECT_TIMEOUT`);
+- **между запусками** — упавшее письмо переносится на потом через
+  `next_attempt_at` по расписанию `MAILSPOON_BACKOFF`, без блокирующих пауз в
+  воркере.
 
 Так зависший или медленный эндпоинт никогда не тормозит чтение ящика.
 
 ```bash
-php artisan spoon:deliver
-php artisan spoon:deliver --limit=100 --max-attempts=5
+php artisan mailspoon:deliver
+php artisan mailspoon:deliver --limit=100 --max-attempts=5
 ```
 
 Опции:
 
 - `--limit=50` — максимум писем за один запуск.
-- `--max-attempts=` — переопределить `SPOON_MAX_ATTEMPTS`.
+- `--max-attempts=` — переопределить `MAILSPOON_MAX_ATTEMPTS`.
 
-Команда — разовая (one-shot); запускать её периодически проще всего встроенным
-планировщиком (см. ниже), который уже вызывает `spoon:deliver` с
+Команда — разовая (one-shot); запускать её периодически проще всего
+планировщиком (см. ниже), который уже вызывает `mailspoon:deliver` с
 `withoutOverlapping()`.
 
 ## Запуск и расписание
 
-В Mailspoon встроен планировщик. Достаточно одной строки системного cron:
+Mailspoon регистрирует свои задачи в планировщике хост-приложения. Если
+системный cron для `schedule:run` ещё не настроен, добавьте одну строку:
 
 ```cron
-* * * * * cd /path/to/mailspoon && php artisan schedule:run >> /dev/null 2>&1
+* * * * * cd /path/to/app && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-`schedule:run` сам вызывает запланированные задачи (с `withoutOverlapping()`,
-чтобы длинный запуск не накладывался на следующий тик). Что именно планируется,
-задаётся в `config/spoon.php` → `schedule`:
+Что именно планируется, задаётся в `config/mailspoon.php` → `schedule`
+(все задачи — с `withoutOverlapping()`):
 
-- **`spoon:deliver`** — включён по умолчанию (`SPOON_DELIVER_CRON`, по умолчанию
-  каждую минуту). Нужен в любом режиме, поскольку чтение только **сохраняет**
-  письма. Чтобы отключить — задайте `SPOON_DELIVER_CRON` пустым.
-- **`imap:pull` по ящикам** — задаётся через `SPOON_PULL_SCHEDULE` как
-  JSON-объект `имя ящика => cron`, по умолчанию выключен.
+- **`mailspoon:deliver`** — включён по умолчанию (`MAILSPOON_DELIVER_CRON`,
+  по умолчанию каждую минуту). Нужен в любом режиме, поскольку чтение только
+  **сохраняет** письма. Чтобы отключить — задайте `MAILSPOON_DELIVER_CRON`
+  пустым.
+- **`mailspoon:pull` по ящикам** — карта `имя ящика => cron` в опубликованном
+  конфиге (ключ `schedule.pull`), по умолчанию пуста.
 - **Очистка журнала и архива** — по умолчанию включена с retention 3 дня.
-  При `SPOON_RETENTION_DAYS > 0` запускается
-  `model:prune` по расписанию `SPOON_PRUNE_CRON` (по умолчанию ежедневно в
-  03:00). Запись `relayed_messages` удаляется только вместе со связанным `.eml`.
-  Очищаются только успешно доставленные письма. Записи `pending` и `failed`
-  сохраняются для повторной доставки и ручного разбора.
+  При `MAILSPOON_RETENTION_DAYS > 0` запускается `model:prune` по расписанию
+  `MAILSPOON_PRUNE_CRON` (по умолчанию ежедневно в 03:00). Запись
+  `relayed_messages` удаляется только вместе со связанным `.eml`. Очищаются
+  только успешно доставленные письма; записи `pending` и `failed` сохраняются
+  для повторной доставки и ручного разбора.
 
 Отсюда два режима эксплуатации:
 
 | Режим | Чтение | Демон / supervisor | Латентность |
 | ----- | ------ | ------------------ | ----------- |
-| **Cron-poll** | `imap:pull` по `SPOON_PULL_SCHEDULE` | не нужен | = интервал cron |
-| **Realtime** | `imap:sentry` (IMAP IDLE) под supervisor | нужен для watcher | секунды |
+| **Cron-poll** | `mailspoon:pull` по карте `schedule.pull` | не нужен | = интервал cron |
+| **Realtime** | `mailspoon:sentry` (IMAP IDLE) под supervisor | нужен для watcher | секунды |
 
-В обоих режимах доставку выполняет запланированный `spoon:deliver` —
+В обоих режимах доставку выполняет запланированный `mailspoon:deliver` —
 отдельный демон или очередь для неё не требуются.
-
-**Cron-poll** (без долгоживущих процессов) — задайте расписание в `.env`:
-
-```dotenv
-SPOON_PULL_SCHEDULE='{"default":"*/5 * * * *"}'
-```
-
-Для нескольких ящиков:
-
-```dotenv
-SPOON_PULL_SCHEDULE='{"default":"*/5 * * * *","secondary":"0 * * * *"}'
-```
-
-**Realtime** — держите `imap:sentry` под супервизором; `spoon:deliver` при этом
-по-прежнему запускается планировщиком:
-
-```ini
-[program:mailspoon]
-command=php /path/to/mailspoon/artisan imap:sentry default --with=flags,headers,body
-autostart=true
-autorestart=true
-```
 
 ## Связка с Laravel Mailbox
 
 Mailspoon отлично сочетается с
 [`beyondcode/laravel-mailbox`](https://github.com/beyondcode/laravel-mailbox).
 Поскольку Mailspoon шлёт запрос в точности так же, как входящий MIME-вебхук
-Mailgun, ваше приложение может принимать пересылаемые письма штатным
+Mailgun, приложение может принимать пересылаемые письма штатным
 mailgun-драйвером Laravel Mailbox — никакого кастомного кода для приёма не
-требуется.
+требуется. Mailspoon можно установить как в отдельное приложение-реле, так и
+**прямо в приложение с Laravel Mailbox** — тогда оно само читает свой ящик и
+шлёт вебхук на собственный эндпоинт.
 
 В приложении-получателе с установленным Laravel Mailbox:
 
@@ -315,13 +327,13 @@ MAILBOX_DRIVER=mailgun
 MAILBOX_MAILGUN_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
 ```
 
-а в Mailspoon направьте реле на его эндпоинт и используйте **тот же ключ**, чтобы
-подписи совпадали:
+а в Mailspoon направьте реле на его эндпоинт и используйте **тот же ключ**,
+чтобы подписи совпадали:
 
 ```dotenv
-SPOON_ENDPOINT=https://your-app.com/laravel-mailbox/mailgun/mime
-# SPOON_KEY должен совпадать с MAILBOX_MAILGUN_KEY
-SPOON_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
+MAILSPOON_ENDPOINT=https://your-app.com/laravel-mailbox/mailgun/mime
+# MAILSPOON_KEY должен совпадать с MAILBOX_MAILGUN_KEY
+MAILSPOON_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
 ```
 
 Дальше обрабатывайте письма как обычно через маршруты Laravel Mailbox:

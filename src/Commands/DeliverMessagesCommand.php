@@ -1,9 +1,7 @@
 <?php
 
-namespace App\Console\Commands;
+namespace TTBooking\Mailspoon\Commands;
 
-use App\Models\RelayedMessage;
-use App\Support\ArchiveStorage;
 use Illuminate\Console\Command;
 use Illuminate\Container\Attributes\Config;
 use Illuminate\Http\Client\ConnectionException;
@@ -12,8 +10,10 @@ use Illuminate\Support\Facades\Http;
 use Random\RandomException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
+use TTBooking\Mailspoon\Models\RelayedMessage;
+use TTBooking\Mailspoon\Support\ArchiveStorage;
 
-#[AsCommand(name: 'spoon:deliver')]
+#[AsCommand(name: 'mailspoon:deliver')]
 class DeliverMessagesCommand extends Command
 {
     /**
@@ -21,7 +21,7 @@ class DeliverMessagesCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'spoon:deliver {--limit=50} {--max-attempts=}';
+    protected $signature = 'mailspoon:deliver {--limit=50} {--max-attempts=}';
 
     /**
      * The console command description.
@@ -50,13 +50,13 @@ class DeliverMessagesCommand extends Command
      * @throws RandomException
      */
     public function handle(
-        #[Config('spoon.key')] string $key,
-        #[Config('spoon.archive.disk')] string $disk,
-        #[Config('spoon.delivery.max_attempts')] int $defaultMaxAttempts,
-        #[Config('spoon.delivery.timeout')] int $timeout,
-        #[Config('spoon.delivery.connect_timeout')] int $connectTimeout,
-        #[Config('spoon.delivery.retries')] int $retries,
-        #[Config('spoon.delivery.backoff')] array $backoff,
+        #[Config('mailspoon.key')] string $key,
+        #[Config('mailspoon.archive.disk')] string $disk,
+        #[Config('mailspoon.delivery.max_attempts')] int $defaultMaxAttempts,
+        #[Config('mailspoon.delivery.timeout')] int $timeout,
+        #[Config('mailspoon.delivery.connect_timeout')] int $connectTimeout,
+        #[Config('mailspoon.delivery.retries')] int $retries,
+        #[Config('mailspoon.delivery.backoff')] array $backoff,
     ): int {
         $this->backoff = $backoff ?: [60];
 

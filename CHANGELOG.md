@@ -7,6 +7,35 @@
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-06-10
+
+Mailspoon стал **composer-пакетом для Laravel** (`ttbooking/mailspoon`) вместо
+standalone-приложения. Содержит **ломающие изменения**; пошаговая инструкция —
+в [UPGRADE.md](UPGRADE.md).
+
+### Changed
+
+- **Распространение**: composer-пакет с авто-discovery провайдера
+  `TTBooking\Mailspoon\MailspoonServiceProvider`; код переехал в неймспейс
+  `TTBooking\Mailspoon\`. Зависимости сужены до точечных `illuminate/*`.
+- **Команды переименованы** в собственный неймспейс: `imap:pull` →
+  `mailspoon:pull`, `imap:sentry` → `mailspoon:sentry`, `spoon:deliver` →
+  `mailspoon:deliver` (vendor-команда `imap:watch` из ImapEngine не менялась).
+- **Конфиг переименован**: публикуемый `config/mailspoon.php`
+  (`vendor:publish --tag=mailspoon-config`), ключ `mailspoon.*`.
+- **Env-переменные переименованы**: `SPOON_*` → `MAILSPOON_*` (один к одному).
+- **Расписание cron-poll** задаётся картой `schedule.pull` в опубликованном
+  конфиге обычным PHP-массивом; расписание регистрируется провайдером пакета
+  в планировщике хост-приложения.
+- Тесты переведены на `orchestra/testbench`.
+
+### Removed
+
+- Скелет standalone-приложения (`bootstrap/`, `artisan`, app-конфиги,
+  `.env.example`).
+- Переменная `SPOON_PULL_SCHEDULE` (JSON в env) — заменена картой в
+  опубликованном конфиге.
+
 ## [2.1.1] - 2026-06-09
 
 ### Fixed

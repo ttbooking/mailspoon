@@ -1,29 +1,29 @@
 <?php
 
-it('schedules spoon:deliver by default', function () {
+it('schedules mailspoon:deliver by default', function () {
     $this->artisan('schedule:list')
-        ->expectsOutputToContain('spoon:deliver')
+        ->expectsOutputToContain('mailspoon:deliver')
         ->assertSuccessful();
 });
 
-it('schedules imap:pull for each configured mailbox', function () {
-    config(['spoon.schedule.pull' => ['default' => '*/5 * * * *']]);
+it('schedules mailspoon:pull for each configured mailbox', function () {
+    config(['mailspoon.schedule.pull' => ['default' => '*/5 * * * *']]);
 
     $this->artisan('schedule:list')
-        ->expectsOutputToContain('imap:pull')
+        ->expectsOutputToContain('mailspoon:pull')
         ->assertSuccessful();
 });
 
 it('does not schedule delivery when its cron is empty', function () {
-    config(['spoon.schedule.deliver' => '']);
+    config(['mailspoon.schedule.deliver' => '']);
 
     $this->artisan('schedule:list')
-        ->doesntExpectOutputToContain('spoon:deliver')
+        ->doesntExpectOutputToContain('mailspoon:deliver')
         ->assertSuccessful();
 });
 
 it('schedules model pruning with the default three day retention', function () {
-    expect(config('spoon.retention.days'))->toBe(3);
+    expect(config('mailspoon.retention.days'))->toBe(3);
 
     $this->artisan('schedule:list')
         ->expectsOutputToContain('model:prune')
@@ -31,7 +31,7 @@ it('schedules model pruning with the default three day retention', function () {
 });
 
 it('does not schedule model pruning when retention is disabled', function () {
-    config(['spoon.retention.days' => 0]);
+    config(['mailspoon.retention.days' => 0]);
 
     $this->artisan('schedule:list')
         ->doesntExpectOutputToContain('model:prune')

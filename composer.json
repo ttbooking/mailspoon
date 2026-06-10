@@ -1,28 +1,31 @@
 {
     "name": "ttbooking/mailspoon",
-    "type": "project",
-    "description": "Simple Mailgun compatible IMAP to HTTP webhook relay.",
-    "keywords": ["imap", "webhook", "mailgun"],
+    "type": "library",
+    "description": "Simple Mailgun compatible IMAP to HTTP webhook relay for Laravel.",
+    "keywords": ["imap", "webhook", "mailgun", "laravel"],
     "license": "MIT",
     "require": {
         "php": "^8.3",
         "directorytree/imapengine-laravel": "^1.0",
-        "laravel/framework": "^13.0",
-        "laravel/tinker": "^3.0"
+        "illuminate/console": "^13.0",
+        "illuminate/container": "^13.0",
+        "illuminate/contracts": "^13.0",
+        "illuminate/database": "^13.0",
+        "illuminate/events": "^13.0",
+        "illuminate/filesystem": "^13.0",
+        "illuminate/http": "^13.0",
+        "illuminate/support": "^13.0"
     },
     "require-dev": {
-        "fakerphp/faker": "^1.23",
-        "laravel/pail": "^1.2.5",
         "laravel/pint": "^1.27",
-        "laravel/sail": "^1.53",
         "mockery/mockery": "^1.6",
-        "nunomaduro/collision": "^8.6",
+        "orchestra/testbench": "^11.1",
         "pestphp/pest": "^4.4",
         "pestphp/pest-plugin-laravel": "^4.1"
     },
     "autoload": {
         "psr-4": {
-            "App\\": "app/"
+            "TTBooking\\Mailspoon\\": "src/"
         }
     },
     "autoload-dev": {
@@ -30,18 +33,11 @@
             "Tests\\": "tests/"
         }
     },
-    "scripts": {
-        "post-autoload-dump": [
-            "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
-            "@php artisan package:discover --ansi"
-        ],
-        "post-update-cmd": [
-            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
-        ]
-    },
     "extra": {
         "laravel": {
-            "dont-discover": []
+            "providers": [
+                "TTBooking\\Mailspoon\\MailspoonServiceProvider"
+            ]
         }
     },
     "config": {
