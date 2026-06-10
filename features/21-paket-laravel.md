@@ -210,8 +210,8 @@ Feature-уровня, переезжают почти механически. С
 - [x] UPGRADE.md, раздел 2.x → 3.0: сводная таблица ломающих изменений,
       маппинг env-переменных и команд, `'throw' => true`, подключение
       существующей БД и архива, supervisor/cron, проверка.
-- [x] CHANGELOG `[3.0.0] - 2026-06-10` (тег и GitHub Release — после merge
-      в master).
+- [x] CHANGELOG `[3.0.0] - 2026-06-10`; PR #2 смержен в master (squash),
+      тег `v3.0.0` и GitHub Release опубликованы 2026-06-10.
 - [ ] Packagist: публикация пакета, авто-обновление по GitHub-хуку.
 
 ### Этап 5 — миграция прода (wb2)
@@ -252,11 +252,13 @@ env-переменных и старых имён команд на новые; 
 
 ## Definition of Done
 
-- [ ] `composer require ttbooking/mailspoon` в чистом Laravel-приложении
+- [x] `composer require ttbooking/mailspoon` в чистом Laravel-приложении
       поднимает команды, listener, миграции и расписание.
-- [ ] `vendor:publish --tag=mailspoon-config` публикует конфиг; настройки
+- [x] `vendor:publish --tag=mailspoon-config` публикует конфиг; настройки
       картами задаются в PHP, env-JSON удалён.
-- [ ] Тесты на testbench зелёные (паритет с текущими 27).
-- [ ] UPGRADE.md: раздел 2.x → 3.0.
+- [x] Тесты на testbench зелёные (паритет с текущими 27: 25 после сноса
+      двух Example-стобов).
+- [x] UPGRADE.md: раздел 2.x → 3.0.
 - [ ] Прод переведён на тонкое хост-приложение с пакетом.
-- [ ] Пакет опубликован на Packagist, релиз 3.0.0.
+- [x] Релиз 3.0.0: тег и GitHub Release опубликованы.
+- [ ] Пакет опубликован на Packagist.
