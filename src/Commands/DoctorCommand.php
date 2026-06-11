@@ -11,7 +11,9 @@ use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
+use TTBooking\Mailspoon\Support\CaptureMarker;
 use TTBooking\Mailspoon\Support\MessageArchive;
+use TTBooking\Mailspoon\Support\MessageMatcher;
 
 #[AsCommand(name: 'mailspoon:doctor')]
 final class DoctorCommand extends Command
@@ -53,6 +55,7 @@ final class DoctorCommand extends Command
             $this->line("Mailbox [{$name}]:");
 
             $this->check('route: endpoint and signing key', fn () => $this->checkRoute($name));
+            $this->check('capture: mark and filters', fn () => $this->checkCapture($name));
             $this->check('imap: connect and log in', fn () => $this->checkImap($name));
             $this->check(
                 $this->option('send') ? 'endpoint: signed test message' : 'endpoint: reachable',
@@ -146,6 +149,23 @@ final class DoctorCommand extends Command
         }
 
         return $endpoint.(str_starts_with($endpoint, 'https://') ? '' : ' (not https!)');
+    }
+
+    /**
+     * Validate the capture marker and filter rules for the mailbox.
+     *
+     * Constructing the matcher rejects broken regular expressions and unknown
+     * fields, so a bad rule fails here instead of silently skipping mail.
+     */
+    private function checkCapture(string $name): string
+    {
+        $marker = CaptureMarker::for($name);
+
+        MessageMatcher::for($name);
+
+        return 'mark: '.$marker->describe().($marker->mode === CaptureMarker::KEYWORD
+            ? ' — the server must allow custom keywords (PERMANENTFLAGS \*)'
+            : '');
     }
 
     /**

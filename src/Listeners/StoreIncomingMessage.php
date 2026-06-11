@@ -9,6 +9,7 @@ use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Container\Attributes\Config;
 use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
+use TTBooking\Mailspoon\Support\CaptureMarker;
 use TTBooking\Mailspoon\Support\MessageArchive;
 use TTBooking\Mailspoon\Support\MessageMatcher;
 use UnexpectedValueException;
@@ -50,10 +51,14 @@ final readonly class StoreIncomingMessage
         // (imapengine-laravel ^1.3 carries it on the event).
         $mailbox = $event->mailbox;
 
+        // How this mailbox marks viewed messages: \Seen for robot mailboxes,
+        // a custom keyword or nothing at all for mailboxes read by humans.
+        $marker = CaptureMarker::for($mailbox);
+
         // A filtered message is still marked as viewed (it must not be picked
         // up again), but never reaches the journal, archive or endpoint.
         if (! MessageMatcher::for($mailbox)->passes($message)) {
-            $message->markSeen();
+            $marker->apply($message);
 
             return;
         }
@@ -68,7 +73,7 @@ final readonly class StoreIncomingMessage
             ->exists();
 
         if ($exists) {
-            $message->markSeen();
+            $marker->apply($message);
 
             return;
         }
@@ -91,7 +96,7 @@ final readonly class StoreIncomingMessage
         ]);
 
         // Safely persisted — reading is now independent of delivery.
-        $message->markSeen();
+        $marker->apply($message);
     }
 
     /**

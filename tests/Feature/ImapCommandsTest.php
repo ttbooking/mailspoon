@@ -7,9 +7,13 @@ use DirectoryTree\ImapEngine\Laravel\Facades\Imap;
 use DirectoryTree\ImapEngine\MailboxInterface;
 use DirectoryTree\ImapEngine\MessageQueryInterface;
 use DirectoryTree\ImapEngine\Testing\FakeMessage;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
 use TTBooking\Mailspoon\Commands\ImapPullCommand;
+use TTBooking\Mailspoon\Models\RelayCursor;
+
+uses(RefreshDatabase::class);
 
 it('fetches flags headers and body by default', function () {
     Event::fake([MessageReceived::class]);
@@ -33,6 +37,100 @@ it('fetches flags headers and body by default', function () {
 
     // The listener resolves routes by the mailbox name carried on the event.
     Event::assertDispatched(fn (MessageReceived $event) => $event->mailbox === 'default');
+});
+
+it('selects by unkeyword when the mailbox marker is a keyword', function () {
+    config(['mailspoon.routes.default.mark' => 'keyword:Mailspoon']);
+
+    $query = Mockery::mock(MessageQueryInterface::class);
+    $query->shouldReceive('unkeyword')->once()->with('Mailspoon')->andReturnSelf();
+    $query->shouldNotReceive('unseen');
+    $query->shouldReceive('withFlags')->andReturnSelf();
+    $query->shouldReceive('withHeaders')->andReturnSelf();
+    $query->shouldReceive('withBody')->andReturnSelf();
+    $query->shouldReceive('get')->andReturn(new MessageCollection);
+
+    $folder = Mockery::mock(FolderInterface::class);
+    $folder->shouldReceive('messages')->andReturn($query);
+
+    $mailbox = Mockery::mock(MailboxInterface::class);
+    $mailbox->shouldReceive('inbox')->andReturn($folder);
+
+    Imap::shouldReceive('mailbox')->with('default')->andReturn($mailbox);
+
+    $this->artisan('mailspoon:pull default')->assertSuccessful();
+});
+
+it('tracks a uid cursor when the marker is none', function () {
+    config(['mailspoon.routes.default.mark' => 'none']);
+    Event::fake([MessageReceived::class]);
+
+    $query = Mockery::mock(MessageQueryInterface::class);
+    $query->shouldReceive('uid')->once()->with(1, INF)->andReturnSelf();
+    $query->shouldReceive('withFlags')->andReturnSelf();
+    $query->shouldReceive('withHeaders')->andReturnSelf();
+    $query->shouldReceive('withBody')->andReturnSelf();
+    $query->shouldReceive('get')->andReturn(new MessageCollection([new FakeMessage(123)]));
+
+    $folder = Mockery::mock(FolderInterface::class);
+    $folder->shouldReceive('messages')->andReturn($query);
+    $folder->shouldReceive('status')->andReturn(['UIDVALIDITY' => 7]);
+    $folder->shouldReceive('path')->andReturn('INBOX');
+
+    $mailbox = Mockery::mock(MailboxInterface::class);
+    $mailbox->shouldReceive('inbox')->andReturn($folder);
+
+    Imap::shouldReceive('mailbox')->with('default')->andReturn($mailbox);
+
+    $this->artisan('mailspoon:pull default')->assertSuccessful();
+
+    $cursor = RelayCursor::sole();
+
+    expect($cursor->mailbox)->toBe('default')
+        ->and($cursor->folder)->toBe('INBOX')
+        ->and($cursor->uidvalidity)->toBe(7)
+        ->and($cursor->last_uid)->toBe(123);
+
+    Event::assertDispatched(MessageReceived::class);
+});
+
+it('resumes the uid cursor and restarts it when uidvalidity changes', function () {
+    config(['mailspoon.routes.default.mark' => 'none']);
+
+    RelayCursor::create([
+        'mailbox' => 'default',
+        'folder' => 'INBOX',
+        'uidvalidity' => 7,
+        'last_uid' => 50,
+    ]);
+
+    $query = Mockery::mock(MessageQueryInterface::class);
+    // Same epoch: resume right after the last viewed UID.
+    $query->shouldReceive('uid')->once()->with(51, INF)->andReturnSelf();
+    // New epoch: UIDs were renumbered, start over.
+    $query->shouldReceive('uid')->once()->with(1, INF)->andReturnSelf();
+    $query->shouldReceive('withFlags')->andReturnSelf();
+    $query->shouldReceive('withHeaders')->andReturnSelf();
+    $query->shouldReceive('withBody')->andReturnSelf();
+    $query->shouldReceive('get')->andReturn(new MessageCollection);
+
+    $folder = Mockery::mock(FolderInterface::class);
+    $folder->shouldReceive('messages')->andReturn($query);
+    $folder->shouldReceive('status')->andReturn(['UIDVALIDITY' => 7], ['UIDVALIDITY' => 8]);
+    $folder->shouldReceive('path')->andReturn('INBOX');
+
+    $mailbox = Mockery::mock(MailboxInterface::class);
+    $mailbox->shouldReceive('inbox')->andReturn($folder);
+
+    Imap::shouldReceive('mailbox')->with('default')->andReturn($mailbox);
+
+    $this->artisan('mailspoon:pull default')->assertSuccessful();
+    $this->artisan('mailspoon:pull default')->assertSuccessful();
+
+    $cursor = RelayCursor::sole();
+
+    expect($cursor->uidvalidity)->toBe(8)
+        ->and($cursor->last_uid)->toBe(0);
 });
 
 it('uses the full MIME parts when with is omitted or empty', function () {

@@ -33,6 +33,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Capture Marker
+    |--------------------------------------------------------------------------
+    |
+    | How mailspoon marks messages it has already viewed. `seen` (default)
+    | uses the \Seen flag — right for robot mailboxes. For mailboxes read by
+    | humans the read state must stay untouched: `keyword:<name>` marks with
+    | a custom IMAP keyword invisible in mail clients (the server must allow
+    | custom keywords — PERMANENTFLAGS \*), and `none` leaves the message
+    | alone entirely, tracking position by UID instead (cron-poll only).
+    | A route may define its own `mark`, which overrides this one.
+    |
+    */
+
+    'mark' => env('MAILSPOON_MARK', 'seen'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Message Filters
     |--------------------------------------------------------------------------
     |
