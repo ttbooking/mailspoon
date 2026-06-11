@@ -106,7 +106,7 @@ class DeliverMessagesCommand extends Command
                         'body-mime' => $raw,
                         'timestamp' => $timestamp,
                         'token' => $token,
-                        'signature' => hash_hmac('sha256', $timestamp.$token, $key),
+                        'signature' => hash_hmac('sha256', $timestamp.$token, $this->keyFor($message, $key)),
                     ]);
             } catch (RequestException $e) {
                 $this->recordFailure($message, $e->response->status(), "HTTP {$e->response->status()}");
@@ -127,6 +127,21 @@ class DeliverMessagesCommand extends Command
         $this->info("Delivered: {$delivered}, failed: {$failed}.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Resolve the signing key for the message's mailbox route.
+     *
+     * Keys are never stored on the record: resolving them at delivery time
+     * means key rotation applies to pending messages immediately.
+     */
+    protected function keyFor(RelayedMessage $message, string $default): string
+    {
+        if ($message->mailbox === null) {
+            return $default;
+        }
+
+        return config("mailspoon.routes.{$message->mailbox}.key") ?? $default;
     }
 
     /**

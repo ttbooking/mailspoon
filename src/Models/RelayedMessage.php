@@ -15,6 +15,8 @@ final class RelayedMessage extends Model
 {
     use Prunable;
 
+    public const string TARGET_DEFAULT = 'default';
+
     public const string STATUS_PENDING = 'pending';
 
     public const string STATUS_DELIVERED = 'delivered';

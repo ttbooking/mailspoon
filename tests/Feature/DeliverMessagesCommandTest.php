@@ -7,14 +7,19 @@ use TTBooking\Mailspoon\Models\RelayedMessage;
 
 uses(RefreshDatabase::class);
 
-function pendingMessage(string $raw = 'RAW-MIME-BODY'): RelayedMessage
-{
-    Storage::disk('local')->put($path = 'mailspoon/2026/06/09/id.eml', $raw);
+function pendingMessage(
+    string $raw = 'RAW-MIME-BODY',
+    ?string $mailbox = null,
+    string $endpoint = 'https://hook.test/mime',
+    string $id = '<id@mailspoon.test>',
+): RelayedMessage {
+    Storage::disk('local')->put($path = 'mailspoon/2026/06/09/'.md5($id).'.eml', $raw);
 
     return RelayedMessage::create([
-        'fingerprint' => '<id@mailspoon.test>',
-        'message_id' => '<id@mailspoon.test>',
-        'endpoint' => 'https://hook.test/mime',
+        'fingerprint' => $id,
+        'message_id' => $id,
+        'mailbox' => $mailbox,
+        'endpoint' => $endpoint,
         'status' => RelayedMessage::STATUS_PENDING,
         'archive_path' => $path,
         'received_at' => now(),
@@ -50,6 +55,33 @@ it('delivers a pending message with a signed payload and marks it delivered', fu
 
         return $request->url() === 'https://hook.test/mime'
             && $request['body-mime'] === 'RAW-MIME-BODY'
+            && $request['signature'] === $expected;
+    });
+});
+
+it('signs each message with its mailbox route key', function () {
+    Http::fake(['*' => Http::response('ok', 200)]);
+    config(['mailspoon.routes.support.key' => 'support-key']);
+
+    // One message captured by two mailboxes: same fingerprint, two records.
+    pendingMessage(mailbox: 'support', endpoint: 'https://support.test/mime', id: '<shared@mailspoon.test>');
+    pendingMessage(mailbox: 'billing', endpoint: 'https://billing.test/mime', id: '<shared@mailspoon.test>');
+
+    $this->artisan('mailspoon:deliver')->assertSuccessful();
+
+    // The routed mailbox is signed with its own key...
+    Http::assertSent(function ($request) {
+        $expected = hash_hmac('sha256', $request['timestamp'].$request['token'], 'support-key');
+
+        return $request->url() === 'https://support.test/mime'
+            && $request['signature'] === $expected;
+    });
+
+    // ...while a mailbox without a route key falls back to the global one.
+    Http::assertSent(function ($request) {
+        $expected = hash_hmac('sha256', $request['timestamp'].$request['token'], 'secret-key');
+
+        return $request->url() === 'https://billing.test/mime'
             && $request['signature'] === $expected;
     });
 });

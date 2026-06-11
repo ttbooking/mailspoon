@@ -8,6 +8,7 @@ use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\Laravel\Facades\Imap;
 use DirectoryTree\ImapEngine\MailboxInterface;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\Event;
 use Symfony\Component\Console\Attribute\AsCommand;
 
@@ -36,6 +37,10 @@ class ImapPullCommand extends Command
     public function handle(): void
     {
         $mailbox = Imap::mailbox($name = $this->argument('mailbox'));
+
+        // Route resolution needs the configured mailbox name; the listener
+        // cannot recover it from the message itself.
+        Context::add('mailspoon.mailbox', $name);
 
         $with = self::messageParts($this->option('with'));
 

@@ -6,6 +6,7 @@ use Carbon\CarbonInterface;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Container\Attributes\Config;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Str;
 use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
@@ -46,15 +47,26 @@ class StoreIncomingMessage
         $messageId = $message->messageId();
         $fingerprint = $messageId ?: 'sha256:'.hash('sha256', $raw);
 
-        // Idempotent capture: if this message is already stored, just make sure
-        // it is flagged read and move on (handles re-pulls and retries).
-        if (RelayedMessage::where('fingerprint', $fingerprint)->exists()) {
+        // The configured mailbox name (the route key) is propagated by the
+        // mailspoon commands; the message itself only knows the IMAP login.
+        $mailbox = Context::get('mailspoon.mailbox');
+
+        // Idempotent capture, scoped per mailbox and target: the same message
+        // delivered to two mailboxes must reach both endpoints, but re-pulls
+        // and retries of one mailbox are deduplicated.
+        $exists = RelayedMessage::query()
+            ->where('mailbox', $mailbox)
+            ->where('target', RelayedMessage::TARGET_DEFAULT)
+            ->where('fingerprint', $fingerprint)
+            ->exists();
+
+        if ($exists) {
             $message->markSeen();
 
             return;
         }
 
-        [$mailbox, $folder] = $this->source($message);
+        [$account, $folder] = $this->source($message);
 
         $receivedAt = $message->date() ?? now();
 
@@ -62,10 +74,12 @@ class StoreIncomingMessage
             'fingerprint' => $fingerprint,
             'message_id' => $messageId,
             'mailbox' => $mailbox,
+            'account' => $account,
             'folder' => $folder,
-            'endpoint' => $this->endpoint,
+            'target' => RelayedMessage::TARGET_DEFAULT,
+            'endpoint' => $this->endpointFor($mailbox),
             'status' => RelayedMessage::STATUS_PENDING,
-            'archive_path' => $this->archive($raw, $fingerprint, $receivedAt),
+            'archive_path' => $this->archive($raw, $fingerprint, $receivedAt, $mailbox),
             'received_at' => $receivedAt,
         ]);
 
@@ -74,7 +88,19 @@ class StoreIncomingMessage
     }
 
     /**
-     * Resolve the originating mailbox account and folder, best-effort.
+     * Resolve the endpoint for the given mailbox route, or the global default.
+     */
+    protected function endpointFor(?string $mailbox): string
+    {
+        if ($mailbox === null) {
+            return $this->endpoint;
+        }
+
+        return config("mailspoon.routes.{$mailbox}.endpoint") ?? $this->endpoint;
+    }
+
+    /**
+     * Resolve the originating IMAP account and folder, best-effort.
      *
      * @return array{0: ?string, 1: ?string}
      */
@@ -91,23 +117,33 @@ class StoreIncomingMessage
 
     /**
      * Archive the raw MIME to the storage disk and return its path.
+     *
+     * The mailbox name is part of the path so that copies of one message
+     * captured from different mailboxes do not overwrite each other.
      */
-    protected function archive(string $raw, string $fingerprint, CarbonInterface $receivedAt): string
+    protected function archive(string $raw, string $fingerprint, CarbonInterface $receivedAt, ?string $mailbox): string
     {
-        $name = Str::of($fingerprint)
-            ->replace(['<', '>', '/', '\\', ':'], '_')
-            ->trim('_')
-            ->value();
-
         $path = sprintf(
-            '%s/%s/%s.eml',
+            '%s/%s%s/%s.eml',
             trim($this->basePath, '/'),
+            $mailbox === null ? '' : $this->pathSegment($mailbox).'/',
             $receivedAt->format('Y/m/d'),
-            $name,
+            $this->pathSegment($fingerprint),
         );
 
         ArchiveStorage::disk($this->disk)->put($path, $raw);
 
         return $path;
+    }
+
+    /**
+     * Sanitize a value for use as a single archive path segment.
+     */
+    protected function pathSegment(string $value): string
+    {
+        return Str::of($value)
+            ->replace(['<', '>', '/', '\\', ':'], '_')
+            ->trim('_.')
+            ->value();
     }
 }

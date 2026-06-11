@@ -5,6 +5,7 @@ use DirectoryTree\ImapEngine\FolderInterface;
 use DirectoryTree\ImapEngine\Laravel\Facades\Imap;
 use DirectoryTree\ImapEngine\MailboxInterface;
 use DirectoryTree\ImapEngine\MessageQueryInterface;
+use Illuminate\Support\Facades\Context;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
 use TTBooking\Mailspoon\Commands\ImapPullCommand;
@@ -27,6 +28,9 @@ it('fetches flags headers and body by default', function () {
     Imap::shouldReceive('mailbox')->once()->with('default')->andReturn($mailbox);
 
     $this->artisan('mailspoon:pull default')->assertSuccessful();
+
+    // The listener resolves routes by the mailbox name from the context.
+    expect(Context::get('mailspoon.mailbox'))->toBe('default');
 });
 
 it('uses the full MIME parts when with is omitted or empty', function () {
@@ -56,5 +60,7 @@ it('passes the default full MIME parts to pull and watch', function () {
     );
 
     expect($command->calls['mailspoon:pull']['--with'])->toBe('flags,headers,body')
-        ->and($command->calls['imap:watch']['--with'])->toBe('flags,headers,body');
+        ->and($command->calls['imap:watch']['--with'])->toBe('flags,headers,body')
+        // Set before imap:watch, so IDLE events resolve routes too.
+        ->and(Context::get('mailspoon.mailbox'))->toBe('default');
 });
