@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace TTBooking\Mailspoon\Listeners;
 
-use Carbon\CarbonInterface;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Container\Attributes\Config;
-use Illuminate\Support\Str;
 use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
-use TTBooking\Mailspoon\Support\ArchiveStorage;
+use TTBooking\Mailspoon\Support\MessageArchive;
 use UnexpectedValueException;
 
 /**
@@ -26,8 +24,7 @@ final readonly class StoreIncomingMessage
 {
     public function __construct(
         #[Config('mailspoon.endpoint')] protected string $endpoint,
-        #[Config('mailspoon.archive.disk')] protected string $disk,
-        #[Config('mailspoon.archive.path')] protected string $basePath,
+        protected MessageArchive $archive,
     ) {}
 
     /**
@@ -80,7 +77,7 @@ final readonly class StoreIncomingMessage
             'target' => RelayedMessage::TARGET_DEFAULT,
             'endpoint' => $this->endpointFor($mailbox),
             'status' => RelayedMessage::STATUS_PENDING,
-            'archive_path' => $this->archive($raw, $fingerprint, $receivedAt, $mailbox),
+            'archive_path' => $this->archive->store($raw, $fingerprint, $receivedAt, $mailbox),
             'received_at' => $receivedAt,
         ]);
 
@@ -110,37 +107,5 @@ final readonly class StoreIncomingMessage
         } catch (Throwable) {
             return [null, null];
         }
-    }
-
-    /**
-     * Archive the raw MIME to the storage disk and return its path.
-     *
-     * The mailbox name is part of the path so that copies of one message
-     * captured from different mailboxes do not overwrite each other.
-     */
-    protected function archive(string $raw, string $fingerprint, CarbonInterface $receivedAt, string $mailbox): string
-    {
-        $path = sprintf(
-            '%s/%s/%s/%s.eml',
-            trim($this->basePath, '/'),
-            $this->pathSegment($mailbox),
-            $receivedAt->format('Y/m/d'),
-            $this->pathSegment($fingerprint),
-        );
-
-        ArchiveStorage::disk($this->disk)->put($path, $raw);
-
-        return $path;
-    }
-
-    /**
-     * Sanitize a value for use as a single archive path segment.
-     */
-    protected function pathSegment(string $value): string
-    {
-        return Str::of($value)
-            ->replace(['<', '>', '/', '\\', ':'], '_')
-            ->trim('_.')
-            ->value();
     }
 }

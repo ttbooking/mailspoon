@@ -13,7 +13,7 @@ use Random\RandomException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
-use TTBooking\Mailspoon\Support\ArchiveStorage;
+use TTBooking\Mailspoon\Support\MessageArchive;
 
 #[AsCommand(name: 'mailspoon:deliver')]
 final class DeliverMessagesCommand extends Command
@@ -52,8 +52,8 @@ final class DeliverMessagesCommand extends Command
      * @throws RandomException
      */
     public function handle(
+        MessageArchive $archive,
         #[Config('mailspoon.key')] string $key,
-        #[Config('mailspoon.archive.disk')] string $disk,
         #[Config('mailspoon.delivery.max_attempts')] int $defaultMaxAttempts,
         #[Config('mailspoon.delivery.timeout')] int $timeout,
         #[Config('mailspoon.delivery.connect_timeout')] int $connectTimeout,
@@ -79,7 +79,7 @@ final class DeliverMessagesCommand extends Command
         $failed = 0;
 
         foreach ($messages as $message) {
-            $raw = $this->rawMime($message, $disk);
+            $raw = $message->archive_path ? $archive->get($message->archive_path) : null;
 
             if ($raw === null) {
                 $this->recordFailure($message, 0, "Archived message missing at [{$message->archive_path}].");
@@ -178,21 +178,5 @@ final class DeliverMessagesCommand extends Command
     protected function backoffSeconds(int $attemptNumber): int
     {
         return $this->backoff[min($attemptNumber, count($this->backoff)) - 1];
-    }
-
-    /**
-     * Read the archived raw MIME for the given message, or null if missing.
-     */
-    protected function rawMime(RelayedMessage $message, string $disk): ?string
-    {
-        if (! $message->archive_path) {
-            return null;
-        }
-
-        $storage = ArchiveStorage::disk($disk);
-
-        return $storage->exists($message->archive_path)
-            ? $storage->get($message->archive_path)
-            : null;
     }
 }

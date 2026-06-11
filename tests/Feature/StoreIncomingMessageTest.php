@@ -6,6 +6,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use TTBooking\Mailspoon\Listeners\StoreIncomingMessage;
 use TTBooking\Mailspoon\Models\RelayedMessage;
+use TTBooking\Mailspoon\Support\MessageArchive;
 
 uses(RefreshDatabase::class);
 
@@ -24,8 +25,7 @@ function makeStoreListener(): StoreIncomingMessage
 {
     return new StoreIncomingMessage(
         endpoint: 'https://hook.test/mime',
-        disk: 'local',
-        basePath: 'mailspoon',
+        archive: new MessageArchive(disk: 'local', basePath: 'mailspoon'),
     );
 }
 
