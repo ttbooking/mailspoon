@@ -23,6 +23,9 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
+          # fileinfo is built into the Linux builds but must be enabled
+          # explicitly on the Windows runners (league/flysystem requires it).
+          extensions: fileinfo
           coverage: none
 
       - run: composer install --no-interaction --no-progress --prefer-dist
