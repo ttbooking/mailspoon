@@ -26,15 +26,25 @@
 
 ## Предлагаемое решение
 
-1. Перехватывать `SIGTERM`/`SIGINT` (нужен `ext-pcntl`, см. #09) и выставлять
-   флаг «останавливаемся»: не начинать новое письмо, дать завершиться текущему,
-   затем выйти:
+1. Перехватывать `SIGTERM`/`SIGINT` и выставлять флаг «останавливаемся»: не
+   начинать новое письмо, дать завершиться текущему, затем выйти. **Не голым
+   `pcntl_*`** (см. раздел про Windows ниже), а штатным механизмом
+   Symfony/Laravel — `SignalableCommandInterface` / `$this->trap()`:
 
    ```php
-   pcntl_async_signals(true);
-   $stopping = false;
-   pcntl_signal(SIGTERM, function () use (&$stopping) { $stopping = true; });
-   // в цикле watch: if ($stopping) { $mailbox->disconnect(); return self::SUCCESS; }
+   // в команде; пустой список на платформах без сигналов (Windows)
+   public function getSubscribedSignals(): array
+   {
+       return defined('SIGTERM') ? [SIGTERM, SIGINT] : [];
+   }
+
+   public function handleSignal(int $signal, int|false $previous): int|false
+   {
+       $this->stopping = true;
+
+       return false; // не выходить немедленно — дать циклу завершиться штатно
+   }
+   // в цикле watch: if ($this->stopping) { $mailbox->disconnect(); return self::SUCCESS; }
    ```
 
 2. Сделать единицу работы атомарной по отношению к рестарту: помечать
@@ -51,11 +61,35 @@
 SPOON_SHUTDOWN_GRACE=25     # сек на завершение текущей работы до выхода
 ```
 
+## Windows: сигналов нет — не сломать разработчиков
+
+POSIX-сигналов и `ext-pcntl` на Windows **не существует** (сам пакет
+разрабатывается под Windows — сломанный `composer install` или фатал при
+запуске команды недопустимы). Правила реализации:
+
+- **`composer.json`: `ext-pcntl` только в `suggest`, никогда в `require`** —
+  иначе установка пакета на Windows падает.
+- **Константы `SIGTERM`/`SIGINT` определяет pcntl** — без него любое голое
+  упоминание (даже в `match`/массиве) — это `Error: Undefined constant`.
+  Все обращения — за `defined('SIGTERM')`, все вызовы `pcntl_*` — за
+  `function_exists(...)`.
+- Реализация через `SignalableCommandInterface` (эскиз выше) даёт
+  Windows-безопасность почти бесплатно: Symfony сам проверяет поддержку
+  сигналов рантаймом, а `getSubscribedSignals()` с guard'ом возвращает пустой
+  список — на Windows команда просто работает как сегодня, без graceful-фазы.
+- Опционально для dev-парности: `sapi_windows_set_ctrl_handler()` (PHP ≥ 7.4)
+  ловит Ctrl+C/Ctrl+Break на Windows — можно выставлять тот же флаг
+  «останавливаемся», чтобы локальная остановка воркера тоже была аккуратной.
+- Тесты на сигнальную логику — `->skip(PHP_OS_FAMILY === 'Windows', ...)`
+  либо тестировать флаг/цикл напрямую без реальных сигналов (CI — ubuntu, у
+  разработчиков — Windows; зелёным должно быть и там, и там).
+
 ## Замечания
 
 - Полностью «exactly-once» в IMAP недостижимо — цель «at-least-once + дедуп»
   (поэтому критична связка с #01 и #05).
-- Требует `pcntl`; в Docker-образе (#09) расширение должно быть установлено.
+- В Docker-образе/проде (#09) `pcntl` должен быть установлен — graceful-фаза
+  работает именно там; Windows-машина разработчика живёт без неё.
 - `--timeout` IDLE стоит держать меньше grace-периода оркестратора.
 
 ## Definition of Done
@@ -64,3 +98,5 @@ SPOON_SHUTDOWN_GRACE=25     # сек на завершение текущей р
 - [ ] Текущее письмо не бросается в неопределённом состоянии.
 - [ ] Связка с #01/#05 исключает дубликаты при аварийном убийстве.
 - [ ] IMAP-соединение корректно закрывается при выходе.
+- [ ] Windows: `composer install` и все команды работают без `pcntl`
+      (graceful-фаза тихо отключена); тесты зелёные на Windows и ubuntu.
