@@ -92,6 +92,24 @@ final class RelayedMessage extends Model
     }
 
     /**
+     * Reset the message to pending so `mailspoon:deliver` picks it up again.
+     *
+     * An explicit operator action: deduplication is intentionally bypassed and
+     * the attempt counter starts over, so even an exhausted message is retried.
+     */
+    public function replay(): void
+    {
+        $this->forceFill([
+            'status' => self::STATUS_PENDING,
+            'response_code' => null,
+            'attempts' => 0,
+            'last_error' => null,
+            'next_attempt_at' => null,
+            'delivered_at' => null,
+        ])->save();
+    }
+
+    /**
      * Mark a delivery attempt as failed and schedule the next retry.
      *
      * The message remains eligible for retry once `$retryAt` has passed (until

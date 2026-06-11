@@ -86,6 +86,21 @@ it('signs each message with its mailbox route key', function () {
     });
 });
 
+it('lists deliverable messages without sending or mutating on --dry-run', function () {
+    Http::fake();
+
+    $message = pendingMessage();
+
+    $this->artisan('mailspoon:deliver --dry-run')
+        ->expectsOutputToContain('Dry-run: 1 message(s) would be delivered. No requests were sent.')
+        ->assertSuccessful();
+
+    Http::assertNothingSent();
+
+    expect($message->refresh()->status)->toBe(RelayedMessage::STATUS_PENDING)
+        ->and($message->attempts)->toBe(0);
+});
+
 it('marks a message failed and schedules a back-off before the next run', function () {
     Http::fake(['*' => Http::response('boom', 500)]);
 

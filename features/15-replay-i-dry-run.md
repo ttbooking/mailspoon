@@ -2,11 +2,14 @@
 
 **Приоритет:** 🟡 средний · **Трудоёмкость:** S
 
-> Актуализация (2.0/3.0): с журналом (#05) и store-and-forward фича сильно
-> подешевела — replay это сброс записи `relayed_messages` обратно в pending,
-> доставку добьёт штатный `mailspoon:deliver`; читать письмо из ящика заново
-> не нужно, сырой MIME лежит в архиве (#19). Команды — `mailspoon:replay` /
-> `mailspoon:test`.
+> ✅ **Реализована** (после 3.1.0): `mailspoon:replay` (по
+> `Message-Id`/fingerprint, `--failed`, `--mailbox`) сбрасывает записи в
+> pending — доставку добьёт штатный `mailspoon:deliver`; MIME читается из
+> архива (#19), ящик не трогается. Dry-run переехал в
+> `mailspoon:deliver --dry-run` (в store-and-forward POST'ы делает доставка,
+> а не pull). Отдельная `mailspoon:test` не понадобилась — её роль закрывают
+> `--dry-run` (что и куда ушло бы) и образец подписи в `mailspoon:doctor`
+> (#17).
 
 ## Проблема
 
@@ -58,6 +61,9 @@ php artisan spoon:test default                 # взять последнее �
 
 ## Definition of Done
 
-- [ ] `spoon:replay` по `Message-Id` и по `--failed`.
-- [ ] `--dry-run` не делает реальных POST и не помечает письма.
-- [ ] `spoon:test` показывает готовый payload и подпись.
+- [x] `mailspoon:replay` по `Message-Id` и по `--failed`.
+- [x] `--dry-run` не делает реальных POST и не меняет записи
+      (`mailspoon:deliver --dry-run`).
+- [x] Payload и подпись видны без отправки — 🔀 `mailspoon:deliver --dry-run`
+      + образец подписи в `mailspoon:doctor` (#17); отдельная `mailspoon:test`
+      не понадобилась.

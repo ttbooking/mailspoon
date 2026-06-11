@@ -6,6 +6,7 @@ namespace TTBooking\Mailspoon\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Container\Attributes\Config;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
@@ -23,7 +24,10 @@ final class DeliverMessagesCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'mailspoon:deliver {--limit=50} {--max-attempts=}';
+    protected $signature = 'mailspoon:deliver
+        {--limit=50}
+        {--max-attempts=}
+        {--dry-run : Show what would be delivered without sending or changing records}';
 
     /**
      * The console command description.
@@ -73,6 +77,10 @@ final class DeliverMessagesCommand extends Command
             $this->info('Nothing to deliver.');
 
             return self::SUCCESS;
+        }
+
+        if ($this->option('dry-run')) {
+            return $this->dryRun($messages, $archive);
         }
 
         $delivered = 0;
@@ -127,6 +135,41 @@ final class DeliverMessagesCommand extends Command
         }
 
         $this->info("Delivered: {$delivered}, failed: {$failed}.");
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Report what would be delivered without sending or mutating anything.
+     *
+     * @param  Collection<int, RelayedMessage>  $messages
+     */
+    protected function dryRun($messages, MessageArchive $archive): int
+    {
+        $this->table(
+            ['ID', 'Mailbox', 'Status', 'Attempts', 'Endpoint', 'Key', 'Archive'],
+            $messages->map(fn (RelayedMessage $message) => [
+                $message->id,
+                $message->mailbox ?? '—',
+                $message->status,
+                $message->attempts,
+                $message->endpoint,
+                $message->mailbox !== null && config("mailspoon.routes.{$message->mailbox}.key") !== null
+                    ? "route:{$message->mailbox}"
+                    : 'global',
+                match (true) {
+                    ! $message->archive_path => 'missing',
+                    ($raw = $archive->get($message->archive_path)) === null => 'missing',
+                    $raw === '' => 'empty',
+                    default => strlen($raw).' B',
+                },
+            ])->all(),
+        );
+
+        $this->info(sprintf(
+            'Dry-run: %d message(s) would be delivered. No requests were sent.',
+            $messages->count(),
+        ));
 
         return self::SUCCESS;
     }
