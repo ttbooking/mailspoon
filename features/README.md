@@ -25,9 +25,9 @@
 | [12](12-veb-dashboard.md) | Веб-дашборд | Панель: журнал, статусы, переотправка — ждём реального запроса | 🟢 низкий | ⬜ |
 | [13](13-fan-out-endpointy.md) | Fan-out | Одно письмо → несколько эндпоинтов | 🟡 средний | 🔀 #03 (фаза 2) |
 | [14](14-shablonizaciya-payload.md) | Шаблонизация payload | Форматтеры: mailgun/json/slack/свой | 🟡 средний | ⬜ |
-| [15](15-replay-i-dry-run.md) | Replay и dry-run | Переотправка писем и сухой прогон | 🟡 средний | ✅ |
+| [15](15-replay-i-dry-run.md) | Replay и dry-run | Переотправка писем и сухой прогон | 🟡 средний | ✅ 3.2.0 |
 | [16](16-planirovshchik-pull.md) | Планировщик | Периодический `imap:pull` по cron | 🟢 низкий | ✅ 2.0.0 |
-| [17](17-preflight-doctor.md) | Preflight-проверка | `mailspoon:doctor` — диагностика связности | 🟡 средний | ✅ |
+| [17](17-preflight-doctor.md) | Preflight-проверка | `mailspoon:doctor` — диагностика связности | 🟡 средний | ✅ 3.2.0 |
 | [18](18-antispam-antivirus.md) | Антиспам/антивирус | Оценка письма до пересылки | 🟢 низкий | ⬜ |
 | [19](19-arhivirovanie-pisem.md) | Архивирование | Сырой MIME в storage (disk/S3) | 🟢 низкий | ✅ 2.0.0 |
 | [20](20-graceful-shutdown.md) | Graceful shutdown | Корректное завершение по сигналу (только IDLE-режим) | 🟢 низкий | ⬜ |
