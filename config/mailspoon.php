@@ -33,6 +33,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Message Filters
+    |--------------------------------------------------------------------------
+    |
+    | Include/exclude rules applied before a message is captured: a filtered
+    | message is not journaled, archived or relayed. A deny match always wins;
+    | an empty allow list allows everything. Patterns are regular expressions
+    | when delimited (`/invoice/i`) and case-insensitive wildcards otherwise
+    | (`*@trusted.com`). Fields: from, subject, header, has_attachment.
+    | A route may define its own `filters`, which then replace these.
+    |
+    */
+
+    'filters' => [
+        // 'allow' => ['subject' => ['/invoice/i']],
+        // 'deny' => [
+        //     'from' => ['no-reply@*', 'mailer-daemon@*'],
+        //     'header' => ['Auto-Submitted' => 'auto-replied'],
+        // ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Message Archive
     |--------------------------------------------------------------------------
     |

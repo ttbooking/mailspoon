@@ -132,6 +132,33 @@ it('captures the same message separately for each mailbox', function () {
         ->and($records->pluck('archive_path')->unique())->toHaveCount(2);
 });
 
+it('marks a filtered message seen without journaling or archiving it', function () {
+    Storage::fake('local');
+    config(['mailspoon.filters' => ['allow' => ['subject' => ['/⚡/u']]]]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('subject')->andReturn('Обычное письмо');
+    $message->shouldReceive('markSeen')->once();
+
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
+
+    expect(RelayedMessage::count())->toBe(0);
+    Storage::disk('local')->assertDirectoryEmpty('/');
+});
+
+it('captures a message that passes the subject filter', function () {
+    Storage::fake('local');
+    config(['mailspoon.filters' => ['allow' => ['subject' => ['/⚡/u']]]]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('subject')->andReturn('Заявка ⚡ срочно');
+    $message->shouldReceive('markSeen')->once();
+
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
+
+    expect(RelayedMessage::sole()->status)->toBe(RelayedMessage::STATUS_PENDING);
+});
+
 it('requires the archive disk to throw filesystem errors', function () {
     Storage::fake('local');
     config(['filesystems.disks.local.throw' => false]);

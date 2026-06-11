@@ -10,6 +10,7 @@ use Illuminate\Container\Attributes\Config;
 use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
 use TTBooking\Mailspoon\Support\MessageArchive;
+use TTBooking\Mailspoon\Support\MessageMatcher;
 use UnexpectedValueException;
 
 /**
@@ -48,6 +49,14 @@ final readonly class StoreIncomingMessage
         // The configured mailbox name from config/imap.php is the route key
         // (imapengine-laravel ^1.3 carries it on the event).
         $mailbox = $event->mailbox;
+
+        // A filtered message is still marked as viewed (it must not be picked
+        // up again), but never reaches the journal, archive or endpoint.
+        if (! MessageMatcher::for($mailbox)->passes($message)) {
+            $message->markSeen();
+
+            return;
+        }
 
         // Idempotent capture, scoped per mailbox and target: the same message
         // delivered to two mailboxes must reach both endpoints, but re-pulls
