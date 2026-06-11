@@ -2,10 +2,11 @@
 
 **Приоритет:** 🟡 средний · **Трудоёмкость:** S (остался только CI)
 
-> Актуализация (3.0): тестовая часть выполнена — 25 Pest-тестов на
-> orchestra/testbench (захват, доставка, ретраи, планировщик), переведены в
-> рамках #21. Остался только CI-workflow; прогон в пакете —
-> `vendor/bin/pest` (артизана нет), плюс `vendor/bin/pint --test`.
+> ✅ **Реализована.** Тестовая часть выполнена в рамках #21 — Pest-тесты на
+> orchestra/testbench (захват, доставка, ретраи, планировщик, маршрутизация,
+> архив). CI добавлен после 3.1.0: `.github/workflows/tests.yml` — матрица
+> PHP 8.3/8.4, `composer install` → `vendor/bin/pint --test` →
+> `vendor/bin/pest` на push в master и каждый PR.
 
 ## Проблема
 
@@ -76,7 +77,8 @@ jobs:
 
 ## Definition of Done
 
-- [ ] Тесты на подпись и payload listener.
-- [ ] Тест «не помечаем seen при ошибке» (страхует #01).
-- [ ] Тест диспатча события командой `imap:pull`.
-- [ ] CI-workflow: install + pint + test.
+- [x] Тесты на подпись и payload listener (в 2.x — на захват и `mailspoon:deliver`).
+- [x] Тест «не помечаем seen при ошибке» (страхует #01) — в store-and-forward:
+      письмо не помечается, пока не зафиксировано в журнале и архиве.
+- [x] Тест диспатча события командой `mailspoon:pull`.
+- [x] CI-workflow: install + pint + test.
