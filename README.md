@@ -1,5 +1,9 @@
 # Mailspoon
 
+[![tests](https://github.com/ttbooking/mailspoon/actions/workflows/tests.yml/badge.svg)](https://github.com/ttbooking/mailspoon/actions/workflows/tests.yml)
+[![Latest Stable Version](https://img.shields.io/packagist/v/ttbooking/mailspoon)](https://packagist.org/packages/ttbooking/mailspoon)
+[![License](https://img.shields.io/packagist/l/ttbooking/mailspoon)](https://packagist.org/packages/ttbooking/mailspoon)
+
 **Простое реле IMAP → HTTP-вебхук, совместимое с Mailgun. Пакет для Laravel.**
 
 Mailspoon подключается к обычному IMAP-ящику, следит за появлением новых писем и
