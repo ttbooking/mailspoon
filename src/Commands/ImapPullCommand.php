@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TTBooking\Mailspoon\Commands;
 
 use DirectoryTree\ImapEngine\FolderInterface;
@@ -12,7 +14,7 @@ use Illuminate\Support\Facades\Event;
 use Symfony\Component\Console\Attribute\AsCommand;
 
 #[AsCommand(name: 'mailspoon:pull')]
-class ImapPullCommand extends Command
+final class ImapPullCommand extends Command
 {
     public const DEFAULT_WITH = ['flags', 'headers', 'body'];
 
@@ -45,7 +47,7 @@ class ImapPullCommand extends Command
         $query = (new ConfigureIdleQuery($with))($query);
 
         foreach ($query->get() as $message) {
-            Event::dispatch(new MessageReceived($message));
+            Event::dispatch(new MessageReceived($message, $name));
         }
     }
 

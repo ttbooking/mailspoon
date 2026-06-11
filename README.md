@@ -135,6 +135,30 @@ MAILSPOON_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
 - `MAILSPOON_ENDPOINT` — URL, который принимает пересылаемые письма.
 - `MAILSPOON_KEY` — общий секрет для подписи каждого запроса.
 
+### Маршрутизация ящиков (`config/mailspoon.php`)
+
+Каждому ящику можно назначить собственный эндпоинт и ключ подписи — карта
+`routes` в опубликованном конфиге, ключ — имя ящика из `config/imap.php`:
+
+```php
+'routes' => [
+    'support' => [
+        'endpoint' => 'https://support.example.com/api/mailgun/mime',
+        'key' => 'key-support',
+    ],
+    'billing' => [
+        'endpoint' => 'https://billing.example.com/api/mailgun/mime',
+        'key' => 'key-billing',
+    ],
+],
+```
+
+Ящик без маршрута (или с частичным маршрутом) использует глобальные
+`MAILSPOON_ENDPOINT`/`MAILSPOON_KEY`. Эндпоинт фиксируется в записи в момент
+захвата письма, а ключ подписи выбирается в момент доставки — поэтому ротация
+ключа действует и на ещё не доставленные письма, а смена эндпоинта — только на
+новые.
+
 ### Хранилище и доставка (`config/mailspoon.php`)
 
 ```dotenv

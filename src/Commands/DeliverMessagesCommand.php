@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TTBooking\Mailspoon\Commands;
 
 use Illuminate\Console\Command;
@@ -11,10 +13,10 @@ use Random\RandomException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
-use TTBooking\Mailspoon\Support\ArchiveStorage;
+use TTBooking\Mailspoon\Support\MessageArchive;
 
 #[AsCommand(name: 'mailspoon:deliver')]
-class DeliverMessagesCommand extends Command
+final class DeliverMessagesCommand extends Command
 {
     /**
      * The name and signature of the console command.
@@ -50,8 +52,8 @@ class DeliverMessagesCommand extends Command
      * @throws RandomException
      */
     public function handle(
+        MessageArchive $archive,
         #[Config('mailspoon.key')] string $key,
-        #[Config('mailspoon.archive.disk')] string $disk,
         #[Config('mailspoon.delivery.max_attempts')] int $defaultMaxAttempts,
         #[Config('mailspoon.delivery.timeout')] int $timeout,
         #[Config('mailspoon.delivery.connect_timeout')] int $connectTimeout,
@@ -77,7 +79,7 @@ class DeliverMessagesCommand extends Command
         $failed = 0;
 
         foreach ($messages as $message) {
-            $raw = $this->rawMime($message, $disk);
+            $raw = $message->archive_path ? $archive->get($message->archive_path) : null;
 
             if ($raw === null) {
                 $this->recordFailure($message, 0, "Archived message missing at [{$message->archive_path}].");
@@ -106,7 +108,7 @@ class DeliverMessagesCommand extends Command
                         'body-mime' => $raw,
                         'timestamp' => $timestamp,
                         'token' => $token,
-                        'signature' => hash_hmac('sha256', $timestamp.$token, $key),
+                        'signature' => hash_hmac('sha256', $timestamp.$token, $this->keyFor($message, $key)),
                     ]);
             } catch (RequestException $e) {
                 $this->recordFailure($message, $e->response->status(), "HTTP {$e->response->status()}");
@@ -127,6 +129,21 @@ class DeliverMessagesCommand extends Command
         $this->info("Delivered: {$delivered}, failed: {$failed}.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Resolve the signing key for the message's mailbox route.
+     *
+     * Keys are never stored on the record: resolving them at delivery time
+     * means key rotation applies to pending messages immediately.
+     */
+    protected function keyFor(RelayedMessage $message, string $default): string
+    {
+        if ($message->mailbox === null) {
+            return $default;
+        }
+
+        return config("mailspoon.routes.{$message->mailbox}.key") ?? $default;
     }
 
     /**
@@ -161,21 +178,5 @@ class DeliverMessagesCommand extends Command
     protected function backoffSeconds(int $attemptNumber): int
     {
         return $this->backoff[min($attemptNumber, count($this->backoff)) - 1];
-    }
-
-    /**
-     * Read the archived raw MIME for the given message, or null if missing.
-     */
-    protected function rawMime(RelayedMessage $message, string $disk): ?string
-    {
-        if (! $message->archive_path) {
-            return null;
-        }
-
-        $storage = ArchiveStorage::disk($disk);
-
-        return $storage->exists($message->archive_path)
-            ? $storage->get($message->archive_path)
-            : null;
     }
 }

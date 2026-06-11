@@ -9,11 +9,13 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Support\Str;
-use TTBooking\Mailspoon\Support\ArchiveStorage;
+use TTBooking\Mailspoon\Support\MessageArchive;
 
 final class RelayedMessage extends Model
 {
     use Prunable;
+
+    public const string TARGET_DEFAULT = 'default';
 
     public const string STATUS_PENDING = 'pending';
 
@@ -111,14 +113,8 @@ final class RelayedMessage extends Model
      */
     protected function pruning(): void
     {
-        if (! $this->archive_path) {
-            return;
-        }
-
-        $storage = ArchiveStorage::disk(config('mailspoon.archive.disk'));
-
-        if ($storage->exists($this->archive_path)) {
-            $storage->delete($this->archive_path);
+        if ($this->archive_path) {
+            resolve(MessageArchive::class)->delete($this->archive_path);
         }
     }
 }

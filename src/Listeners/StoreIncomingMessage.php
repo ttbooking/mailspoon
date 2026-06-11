@@ -1,15 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TTBooking\Mailspoon\Listeners;
 
-use Carbon\CarbonInterface;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Container\Attributes\Config;
-use Illuminate\Support\Str;
 use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
-use TTBooking\Mailspoon\Support\ArchiveStorage;
+use TTBooking\Mailspoon\Support\MessageArchive;
 use UnexpectedValueException;
 
 /**
@@ -20,12 +20,11 @@ use UnexpectedValueException;
  * marked as seen so the single-threaded reader is never blocked by a slow or
  * failing endpoint. Actual delivery is handled out-of-band by `mailspoon:deliver`.
  */
-class StoreIncomingMessage
+final readonly class StoreIncomingMessage
 {
     public function __construct(
         #[Config('mailspoon.endpoint')] protected string $endpoint,
-        #[Config('mailspoon.archive.disk')] protected string $disk,
-        #[Config('mailspoon.archive.path')] protected string $basePath,
+        protected MessageArchive $archive,
     ) {}
 
     /**
@@ -46,15 +45,26 @@ class StoreIncomingMessage
         $messageId = $message->messageId();
         $fingerprint = $messageId ?: 'sha256:'.hash('sha256', $raw);
 
-        // Idempotent capture: if this message is already stored, just make sure
-        // it is flagged read and move on (handles re-pulls and retries).
-        if (RelayedMessage::where('fingerprint', $fingerprint)->exists()) {
+        // The configured mailbox name from config/imap.php is the route key
+        // (imapengine-laravel ^1.3 carries it on the event).
+        $mailbox = $event->mailbox;
+
+        // Idempotent capture, scoped per mailbox and target: the same message
+        // delivered to two mailboxes must reach both endpoints, but re-pulls
+        // and retries of one mailbox are deduplicated.
+        $exists = RelayedMessage::query()
+            ->where('mailbox', $mailbox)
+            ->where('target', RelayedMessage::TARGET_DEFAULT)
+            ->where('fingerprint', $fingerprint)
+            ->exists();
+
+        if ($exists) {
             $message->markSeen();
 
             return;
         }
 
-        [$mailbox, $folder] = $this->source($message);
+        [$account, $folder] = $this->source($message);
 
         $receivedAt = $message->date() ?? now();
 
@@ -62,10 +72,12 @@ class StoreIncomingMessage
             'fingerprint' => $fingerprint,
             'message_id' => $messageId,
             'mailbox' => $mailbox,
+            'account' => $account,
             'folder' => $folder,
-            'endpoint' => $this->endpoint,
+            'target' => RelayedMessage::TARGET_DEFAULT,
+            'endpoint' => $this->endpointFor($mailbox),
             'status' => RelayedMessage::STATUS_PENDING,
-            'archive_path' => $this->archive($raw, $fingerprint, $receivedAt),
+            'archive_path' => $this->archive->store($raw, $fingerprint, $receivedAt, $mailbox),
             'received_at' => $receivedAt,
         ]);
 
@@ -74,7 +86,15 @@ class StoreIncomingMessage
     }
 
     /**
-     * Resolve the originating mailbox account and folder, best-effort.
+     * Resolve the endpoint for the given mailbox route, or the global default.
+     */
+    protected function endpointFor(string $mailbox): string
+    {
+        return config("mailspoon.routes.{$mailbox}.endpoint") ?? $this->endpoint;
+    }
+
+    /**
+     * Resolve the originating IMAP account and folder, best-effort.
      *
      * @return array{0: ?string, 1: ?string}
      */
@@ -87,27 +107,5 @@ class StoreIncomingMessage
         } catch (Throwable) {
             return [null, null];
         }
-    }
-
-    /**
-     * Archive the raw MIME to the storage disk and return its path.
-     */
-    protected function archive(string $raw, string $fingerprint, CarbonInterface $receivedAt): string
-    {
-        $name = Str::of($fingerprint)
-            ->replace(['<', '>', '/', '\\', ':'], '_')
-            ->trim('_')
-            ->value();
-
-        $path = sprintf(
-            '%s/%s/%s.eml',
-            trim($this->basePath, '/'),
-            $receivedAt->format('Y/m/d'),
-            $name,
-        );
-
-        ArchiveStorage::disk($this->disk)->put($path, $raw);
-
-        return $path;
     }
 }

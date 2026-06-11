@@ -14,7 +14,7 @@ use TTBooking\Mailspoon\Commands\ImapSentryCommand;
 use TTBooking\Mailspoon\Listeners\StoreIncomingMessage;
 use TTBooking\Mailspoon\Models\RelayedMessage;
 
-class MailspoonServiceProvider extends ServiceProvider
+final class MailspoonServiceProvider extends ServiceProvider
 {
     /**
      * Register application services.

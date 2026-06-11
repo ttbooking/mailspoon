@@ -13,6 +13,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Mailbox Routes
+    |--------------------------------------------------------------------------
+    |
+    | Per-mailbox delivery targets, keyed by the mailbox name from
+    | config/imap.php. A mailbox without a route (or with a partial one) falls
+    | back to the global endpoint and key above. The endpoint is fixed on the
+    | record when the message is captured; the signing key is resolved at
+    | delivery time, so key rotation applies to pending messages immediately.
+    |
+    */
+
+    'routes' => [
+        // 'support' => [
+        //     'endpoint' => 'https://support.example.com/api/mailgun/mime',
+        //     'key' => 'key-support',
+        // ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Message Archive
     |--------------------------------------------------------------------------
     |
