@@ -69,7 +69,8 @@ SPOON_FILTERED_ACTION=mark_seen   # mark_seen | leave | move:Filtered
 
 ## Definition of Done
 
-- [ ] `allow`/`deny` по from/subject/header/has_attachment.
-- [ ] Настраиваемое действие для отфильтрованных писем.
-- [ ] `deny` приоритетнее `allow`; пустой `allow` = всё.
-- [ ] Тесты на матчер (юнит) + интеграция с listener.
+- [x] `allow`/`deny` по from/subject/header/has_attachment.
+- [x] Действие для отфильтрованных — маркер ящика из #22 (`seen` по
+      умолчанию); расширенные действия (`move:` и т. п.) — 🔀 #06.
+- [x] `deny` приоритетнее `allow`; пустой `allow` = всё.
+- [x] Тесты на матчер (юнит) + интеграция с listener.

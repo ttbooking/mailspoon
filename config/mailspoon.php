@@ -33,6 +33,45 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Capture Marker
+    |--------------------------------------------------------------------------
+    |
+    | How mailspoon marks messages it has already viewed. `seen` (default)
+    | uses the \Seen flag — right for robot mailboxes. For mailboxes read by
+    | humans the read state must stay untouched: `keyword:<name>` marks with
+    | a custom IMAP keyword invisible in mail clients (the server must allow
+    | custom keywords — PERMANENTFLAGS \*), and `none` leaves the message
+    | alone entirely, tracking position by UID instead (cron-poll only).
+    | A route may define its own `mark`, which overrides this one.
+    |
+    */
+
+    'mark' => env('MAILSPOON_MARK', 'seen'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Message Filters
+    |--------------------------------------------------------------------------
+    |
+    | Include/exclude rules applied before a message is captured: a filtered
+    | message is not journaled, archived or relayed. A deny match always wins;
+    | an empty allow list allows everything. Patterns are regular expressions
+    | when delimited (`/invoice/i`) and case-insensitive wildcards otherwise
+    | (`*@trusted.com`). Fields: from, subject, header, has_attachment.
+    | A route may define its own `filters`, which then replace these.
+    |
+    */
+
+    'filters' => [
+        // 'allow' => ['subject' => ['/invoice/i']],
+        // 'deny' => [
+        //     'from' => ['no-reply@*', 'mailer-daemon@*'],
+        //     'header' => ['Auto-Submitted' => 'auto-replied'],
+        // ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Message Archive
     |--------------------------------------------------------------------------
     |

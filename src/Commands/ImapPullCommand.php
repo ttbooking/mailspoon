@@ -9,9 +9,12 @@ use DirectoryTree\ImapEngine\Laravel\Commands\ConfigureIdleQuery;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\Laravel\Facades\Imap;
 use DirectoryTree\ImapEngine\MailboxInterface;
+use DirectoryTree\ImapEngine\MessageQueryInterface;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Event;
 use Symfony\Component\Console\Attribute\AsCommand;
+use TTBooking\Mailspoon\Models\RelayCursor;
+use TTBooking\Mailspoon\Support\CaptureMarker;
 
 #[AsCommand(name: 'mailspoon:pull')]
 final class ImapPullCommand extends Command
@@ -43,12 +46,68 @@ final class ImapPullCommand extends Command
 
         $this->info("Checking mailbox [$name]...");
 
-        $query = $this->folder($mailbox)->messages()->unseen();
+        $folder = $this->folder($mailbox);
+
+        [$query, $cursor] = $this->select($folder, $name);
+
         $query = (new ConfigureIdleQuery($with))($query);
+
+        $lastUid = $cursor?->last_uid ?? 0;
 
         foreach ($query->get() as $message) {
             Event::dispatch(new MessageReceived($message, $name));
+
+            $lastUid = max($lastUid, $message->uid());
         }
+
+        $cursor?->forceFill(['last_uid' => $lastUid])->save();
+    }
+
+    /**
+     * Build the unprocessed-messages query for the mailbox's capture marker.
+     *
+     * `seen` selects unseen messages, `keyword` selects messages without the
+     * keyword, and `none` selects by UID above the stored cursor.
+     *
+     * @return array{0: MessageQueryInterface, 1: ?RelayCursor}
+     */
+    protected function select(FolderInterface $folder, string $name): array
+    {
+        $marker = CaptureMarker::for($name);
+
+        if ($marker->mode === CaptureMarker::KEYWORD) {
+            return [$folder->messages()->unkeyword($marker->keyword), null];
+        }
+
+        if ($marker->mode === CaptureMarker::NONE) {
+            $cursor = $this->cursor($folder, $name);
+
+            return [$folder->messages()->uid($cursor->last_uid + 1, INF), $cursor];
+        }
+
+        return [$folder->messages()->unseen(), null];
+    }
+
+    /**
+     * Resolve the folder's UID cursor, restarting it when UIDVALIDITY changes.
+     *
+     * After a restart everything is re-fetched; deduplication by fingerprint
+     * prevents re-delivery of messages that were already captured.
+     */
+    protected function cursor(FolderInterface $folder, string $name): RelayCursor
+    {
+        $validity = (int) ($folder->status()['UIDVALIDITY'] ?? 0);
+
+        $cursor = RelayCursor::firstOrCreate(
+            ['mailbox' => $name, 'folder' => $folder->path()],
+            ['uidvalidity' => $validity],
+        );
+
+        if ($cursor->uidvalidity !== $validity) {
+            $cursor->forceFill(['uidvalidity' => $validity, 'last_uid' => 0])->save();
+        }
+
+        return $cursor;
     }
 
     /**

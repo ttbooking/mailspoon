@@ -132,6 +132,70 @@ it('captures the same message separately for each mailbox', function () {
         ->and($records->pluck('archive_path')->unique())->toHaveCount(2);
 });
 
+it('marks a filtered message seen without journaling or archiving it', function () {
+    Storage::fake('local');
+    config(['mailspoon.filters' => ['allow' => ['subject' => ['/⚡/u']]]]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('subject')->andReturn('Обычное письмо');
+    $message->shouldReceive('markSeen')->once();
+
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
+
+    expect(RelayedMessage::count())->toBe(0);
+    Storage::disk('local')->assertDirectoryEmpty('/');
+});
+
+it('captures a message that passes the subject filter', function () {
+    Storage::fake('local');
+    config(['mailspoon.filters' => ['allow' => ['subject' => ['/⚡/u']]]]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('subject')->andReturn('Заявка ⚡ срочно');
+    $message->shouldReceive('markSeen')->once();
+
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
+
+    expect(RelayedMessage::sole()->status)->toBe(RelayedMessage::STATUS_PENDING);
+});
+
+it('marks captured and duplicate messages with the route keyword instead of seen', function () {
+    Storage::fake('local');
+    config(['mailspoon.routes.default.mark' => 'keyword:Mailspoon']);
+
+    $first = fakeIncomingMessage();
+    $first->shouldReceive('flag')->once()->with('Mailspoon', '+');
+    $first->shouldNotReceive('markSeen');
+
+    makeStoreListener()->handle(new MessageReceived($first, 'default'));
+
+    // The deduplicated re-pull is marked the same way, not with \Seen.
+    $second = fakeIncomingMessage();
+    $second->shouldReceive('flag')->once()->with('Mailspoon', '+');
+    $second->shouldNotReceive('markSeen');
+
+    makeStoreListener()->handle(new MessageReceived($second, 'default'));
+
+    expect(RelayedMessage::count())->toBe(1);
+});
+
+it('leaves a filtered message untouched when the marker is none', function () {
+    Storage::fake('local');
+    config([
+        'mailspoon.routes.default.mark' => 'none',
+        'mailspoon.routes.default.filters' => ['allow' => ['subject' => ['/⚡/u']]],
+    ]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('subject')->andReturn('Обычное письмо');
+    $message->shouldNotReceive('markSeen');
+    $message->shouldNotReceive('flag');
+
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
+
+    expect(RelayedMessage::count())->toBe(0);
+});
+
 it('requires the archive disk to throw filesystem errors', function () {
     Storage::fake('local');
     config(['filesystems.disks.local.throw' => false]);

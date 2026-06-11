@@ -75,6 +75,26 @@ it('fails when the archive disk suppresses filesystem errors', function () {
         ->assertFailed();
 });
 
+it('fails when a filter rule is malformed', function () {
+    config(['mailspoon.filters' => ['allow' => ['subject' => ['/broken[/']]]]);
+    Http::fake(['*' => Http::response('', 204)]);
+    healthyImapMock();
+
+    $this->artisan('mailspoon:doctor')
+        ->expectsOutputToContain('Invalid filter pattern')
+        ->assertFailed();
+});
+
+it('reports the configured capture marker', function () {
+    config(['mailspoon.routes.default.mark' => 'keyword:Mailspoon']);
+    Http::fake(['*' => Http::response('', 204)]);
+    healthyImapMock();
+
+    $this->artisan('mailspoon:doctor')
+        ->expectsOutputToContain('keyword [Mailspoon]')
+        ->assertSuccessful();
+});
+
 it('posts a signed test message with --send', function () {
     Http::fake(['*' => Http::response('ok', 200)]);
     healthyImapMock();
