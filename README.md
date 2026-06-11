@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/ttbooking/mailspoon/actions/workflows/tests.yml/badge.svg)](https://github.com/ttbooking/mailspoon/actions/workflows/tests.yml)
 [![Latest Stable Version](https://img.shields.io/packagist/v/ttbooking/mailspoon)](https://packagist.org/packages/ttbooking/mailspoon)
-[![License](https://img.shields.io/packagist/l/ttbooking/mailspoon)](https://packagist.org/packages/ttbooking/mailspoon)
+[![License](https://img.shields.io/packagist/l/ttbooking/mailspoon)](LICENSE)
 
 **Простое реле IMAP → HTTP-вебхук, совместимое с Mailgun. Пакет для Laravel.**
 
@@ -380,5 +380,4 @@ Mailbox::from('sender@example.com', function (InboundEmail $email) {
 
 ## Лицензия
 
-Mailspoon распространяется по лицензии
-[MIT](https://opensource.org/licenses/MIT).
+Mailspoon распространяется по лицензии [MIT](LICENSE).
