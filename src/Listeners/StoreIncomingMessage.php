@@ -6,7 +6,6 @@ use Carbon\CarbonInterface;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Container\Attributes\Config;
-use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Str;
 use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
@@ -47,9 +46,9 @@ class StoreIncomingMessage
         $messageId = $message->messageId();
         $fingerprint = $messageId ?: 'sha256:'.hash('sha256', $raw);
 
-        // The configured mailbox name (the route key) is propagated by the
-        // mailspoon commands; the message itself only knows the IMAP login.
-        $mailbox = Context::get('mailspoon.mailbox');
+        // The configured mailbox name from config/imap.php is the route key
+        // (imapengine-laravel ^1.3 carries it on the event).
+        $mailbox = $event->mailbox;
 
         // Idempotent capture, scoped per mailbox and target: the same message
         // delivered to two mailboxes must reach both endpoints, but re-pulls
@@ -90,12 +89,8 @@ class StoreIncomingMessage
     /**
      * Resolve the endpoint for the given mailbox route, or the global default.
      */
-    protected function endpointFor(?string $mailbox): string
+    protected function endpointFor(string $mailbox): string
     {
-        if ($mailbox === null) {
-            return $this->endpoint;
-        }
-
         return config("mailspoon.routes.{$mailbox}.endpoint") ?? $this->endpoint;
     }
 
@@ -121,12 +116,12 @@ class StoreIncomingMessage
      * The mailbox name is part of the path so that copies of one message
      * captured from different mailboxes do not overwrite each other.
      */
-    protected function archive(string $raw, string $fingerprint, CarbonInterface $receivedAt, ?string $mailbox): string
+    protected function archive(string $raw, string $fingerprint, CarbonInterface $receivedAt, string $mailbox): string
     {
         $path = sprintf(
-            '%s/%s%s/%s.eml',
+            '%s/%s/%s/%s.eml',
             trim($this->basePath, '/'),
-            $mailbox === null ? '' : $this->pathSegment($mailbox).'/',
+            $this->pathSegment($mailbox),
             $receivedAt->format('Y/m/d'),
             $this->pathSegment($fingerprint),
         );

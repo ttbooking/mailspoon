@@ -3,7 +3,6 @@
 namespace TTBooking\Mailspoon\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Context;
 use Symfony\Component\Console\Attribute\AsCommand;
 
 #[AsCommand(name: 'mailspoon:sentry')]
@@ -28,10 +27,6 @@ class ImapSentryCommand extends Command
      */
     public function handle(): void
     {
-        // The vendor imap:watch runs in-process, so the mailbox name set here
-        // reaches the listener for IDLE events as well.
-        Context::add('mailspoon.mailbox', $this->argument('mailbox'));
-
         $with = implode(',', ImapPullCommand::messageParts($this->option('with')));
 
         $this->call('mailspoon:pull', [

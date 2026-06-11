@@ -3,7 +3,6 @@
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\Storage;
 use TTBooking\Mailspoon\Listeners\StoreIncomingMessage;
 use TTBooking\Mailspoon\Models\RelayedMessage;
@@ -36,12 +35,13 @@ it('archives the raw message, records it as pending and marks it seen', function
     $message = fakeIncomingMessage();
     $message->shouldReceive('markSeen')->once();
 
-    makeStoreListener()->handle(new MessageReceived($message));
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
 
     $record = RelayedMessage::sole();
 
     expect($record->status)->toBe(RelayedMessage::STATUS_PENDING)
         ->and($record->message_id)->toBe('<id@mailspoon.test>')
+        ->and($record->mailbox)->toBe('default')
         ->and($record->endpoint)->toBe('https://hook.test/mime')
         ->and($record->archive_path)->not->toBeNull();
 
@@ -54,11 +54,11 @@ it('does not store the same message twice but still marks it seen', function () 
 
     $first = fakeIncomingMessage();
     $first->shouldReceive('markSeen')->once();
-    makeStoreListener()->handle(new MessageReceived($first));
+    makeStoreListener()->handle(new MessageReceived($first, 'default'));
 
     $second = fakeIncomingMessage();
     $second->shouldReceive('markSeen')->once();
-    makeStoreListener()->handle(new MessageReceived($second));
+    makeStoreListener()->handle(new MessageReceived($second, 'default'));
 
     expect(RelayedMessage::count())->toBe(1);
 });
@@ -69,7 +69,7 @@ it('rejects an empty raw message without storing or marking it seen', function (
     $message = fakeIncomingMessage(raw: '');
     $message->shouldNotReceive('markSeen');
 
-    expect(fn () => makeStoreListener()->handle(new MessageReceived($message)))
+    expect(fn () => makeStoreListener()->handle(new MessageReceived($message, 'default')))
         ->toThrow(UnexpectedValueException::class, 'empty raw MIME');
 
     expect(RelayedMessage::count())->toBe(0);
@@ -79,12 +79,11 @@ it('rejects an empty raw message without storing or marking it seen', function (
 it('stores the route endpoint and mailbox name for a routed mailbox', function () {
     Storage::fake('local');
     config(['mailspoon.routes.support.endpoint' => 'https://support.test/mime']);
-    Context::add('mailspoon.mailbox', 'support');
 
     $message = fakeIncomingMessage();
     $message->shouldReceive('markSeen')->once();
 
-    makeStoreListener()->handle(new MessageReceived($message));
+    makeStoreListener()->handle(new MessageReceived($message, 'support'));
 
     $record = RelayedMessage::sole();
 
@@ -98,12 +97,11 @@ it('stores the route endpoint and mailbox name for a routed mailbox', function (
 
 it('falls back to the global endpoint for a mailbox without a route', function () {
     Storage::fake('local');
-    Context::add('mailspoon.mailbox', 'billing');
 
     $message = fakeIncomingMessage();
     $message->shouldReceive('markSeen')->once();
 
-    makeStoreListener()->handle(new MessageReceived($message));
+    makeStoreListener()->handle(new MessageReceived($message, 'billing'));
 
     $record = RelayedMessage::sole();
 
@@ -119,12 +117,10 @@ it('captures the same message separately for each mailbox', function () {
     ]);
 
     foreach (['support', 'billing'] as $mailbox) {
-        Context::add('mailspoon.mailbox', $mailbox);
-
         $message = fakeIncomingMessage();
         $message->shouldReceive('markSeen')->once();
 
-        makeStoreListener()->handle(new MessageReceived($message));
+        makeStoreListener()->handle(new MessageReceived($message, $mailbox));
     }
 
     $records = RelayedMessage::orderBy('id')->get();
@@ -143,7 +139,7 @@ it('requires the archive disk to throw filesystem errors', function () {
     $message = fakeIncomingMessage();
     $message->shouldNotReceive('markSeen');
 
-    expect(fn () => makeStoreListener()->handle(new MessageReceived($message)))
+    expect(fn () => makeStoreListener()->handle(new MessageReceived($message, 'default')))
         ->toThrow(InvalidArgumentException::class, 'must be configured with [throw => true]');
 
     expect(RelayedMessage::count())->toBe(0);
