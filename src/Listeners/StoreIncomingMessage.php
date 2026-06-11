@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TTBooking\Mailspoon\Listeners;
 
 use Carbon\CarbonInterface;
@@ -20,7 +22,7 @@ use UnexpectedValueException;
  * marked as seen so the single-threaded reader is never blocked by a slow or
  * failing endpoint. Actual delivery is handled out-of-band by `mailspoon:deliver`.
  */
-class StoreIncomingMessage
+final readonly class StoreIncomingMessage
 {
     public function __construct(
         #[Config('mailspoon.endpoint')] protected string $endpoint,

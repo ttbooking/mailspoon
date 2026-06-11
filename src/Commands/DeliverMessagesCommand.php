@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TTBooking\Mailspoon\Commands;
 
 use Illuminate\Console\Command;
@@ -14,7 +16,7 @@ use TTBooking\Mailspoon\Models\RelayedMessage;
 use TTBooking\Mailspoon\Support\ArchiveStorage;
 
 #[AsCommand(name: 'mailspoon:deliver')]
-class DeliverMessagesCommand extends Command
+final class DeliverMessagesCommand extends Command
 {
     /**
      * The name and signature of the console command.

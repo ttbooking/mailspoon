@@ -7,11 +7,9 @@ use DirectoryTree\ImapEngine\Laravel\Facades\Imap;
 use DirectoryTree\ImapEngine\MailboxInterface;
 use DirectoryTree\ImapEngine\MessageQueryInterface;
 use DirectoryTree\ImapEngine\Testing\FakeMessage;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
-use Symfony\Component\Console\Input\ArrayInput;
-use Symfony\Component\Console\Output\BufferedOutput;
 use TTBooking\Mailspoon\Commands\ImapPullCommand;
-use TTBooking\Mailspoon\Commands\ImapSentryCommand;
 
 it('fetches flags headers and body by default', function () {
     Event::fake([MessageReceived::class]);
@@ -45,24 +43,34 @@ it('uses the full MIME parts when with is omitted or empty', function () {
 });
 
 it('passes the default full MIME parts to pull and watch', function () {
-    $command = new class extends ImapSentryCommand
-    {
-        public array $calls = [];
+    Event::fake([MessageReceived::class]);
 
-        public function call($command, array $arguments = [])
-        {
-            $this->calls[$command] = $arguments;
+    // The real mailspoon:pull runs against a mocked, empty mailbox.
+    $query = Mockery::mock(MessageQueryInterface::class);
+    $query->shouldReceive('unseen')->andReturnSelf();
+    $query->shouldReceive('withFlags')->andReturnSelf();
+    $query->shouldReceive('withHeaders')->andReturnSelf();
+    $query->shouldReceive('withBody')->andReturnSelf();
+    $query->shouldReceive('get')->andReturn(new MessageCollection);
 
-            return self::SUCCESS;
-        }
-    };
-    $command->setLaravel($this->app);
+    $folder = Mockery::mock(FolderInterface::class);
+    $folder->shouldReceive('messages')->andReturn($query);
 
-    $command->run(
-        new ArrayInput(['mailbox' => 'default']),
-        new BufferedOutput,
+    $mailbox = Mockery::mock(MailboxInterface::class);
+    $mailbox->shouldReceive('inbox')->andReturn($folder);
+
+    Imap::shouldReceive('mailbox')->with('default')->andReturn($mailbox);
+
+    // Replace the vendor watcher with a stub that records its options.
+    $watch = null;
+    Artisan::command(
+        'imap:watch {mailbox} {folder?} {--method=} {--with=} {--timeout=} {--attempts=} {--debug=}',
+        function () use (&$watch) {
+            $watch = $this->options();
+        },
     );
 
-    expect($command->calls['mailspoon:pull']['--with'])->toBe('flags,headers,body')
-        ->and($command->calls['imap:watch']['--with'])->toBe('flags,headers,body');
+    $this->artisan('mailspoon:sentry default')->assertSuccessful();
+
+    expect($watch['with'])->toBe('flags,headers,body');
 });

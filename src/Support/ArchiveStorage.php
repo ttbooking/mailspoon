@@ -8,7 +8,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 
-class ArchiveStorage
+final class ArchiveStorage
 {
     /**
      * Resolve an archive disk configured to throw on filesystem failures.

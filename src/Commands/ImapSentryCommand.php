@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TTBooking\Mailspoon\Commands;
 
 use Illuminate\Console\Command;
 use Symfony\Component\Console\Attribute\AsCommand;
 
 #[AsCommand(name: 'mailspoon:sentry')]
-class ImapSentryCommand extends Command
+final class ImapSentryCommand extends Command
 {
     /**
      * The name and signature of the console command.
