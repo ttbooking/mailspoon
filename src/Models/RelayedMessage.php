@@ -28,11 +28,13 @@ final class RelayedMessage extends Model
     protected function casts(): array
     {
         return [
+            'uid' => 'integer',
             'attempts' => 'integer',
             'response_code' => 'integer',
             'received_at' => 'datetime',
             'delivered_at' => 'datetime',
             'next_attempt_at' => 'datetime',
+            'tidied_at' => 'datetime',
         ];
     }
 
@@ -77,6 +79,35 @@ final class RelayedMessage extends Model
     }
 
     /**
+     * Scope to messages whose final outcome awaits an after-relay action.
+     *
+     * Delivered messages are final immediately; failed messages only once
+     * their delivery attempts are exhausted — while retries are still
+     * possible the message must stay where it is.
+     */
+    public function scopeTidyable(Builder $query, int $maxAttempts): Builder
+    {
+        return $query
+            ->whereNull('tidied_at')
+            ->whereNotNull('mailbox')
+            ->where(fn (Builder $query) => $query
+                ->where('status', self::STATUS_DELIVERED)
+                ->orWhere(fn (Builder $query) => $query
+                    ->where('status', self::STATUS_FAILED)
+                    ->where('attempts', '>=', $maxAttempts)
+                )
+            );
+    }
+
+    /**
+     * Record that the after-relay action was applied (or is inapplicable).
+     */
+    public function markTidied(): void
+    {
+        $this->forceFill(['tidied_at' => now()])->save();
+    }
+
+    /**
      * Mark the message as successfully delivered.
      */
     public function markDelivered(int $responseCode): void
@@ -106,6 +137,8 @@ final class RelayedMessage extends Model
             'last_error' => null,
             'next_attempt_at' => null,
             'delivered_at' => null,
+            // The new outcome gets its own after-relay action.
+            'tidied_at' => null,
         ])->save();
     }
 

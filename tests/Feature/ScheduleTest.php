@@ -14,6 +14,20 @@ it('schedules mailspoon:pull for each configured mailbox', function () {
         ->assertSuccessful();
 });
 
+it('schedules mailspoon:tidy by default', function () {
+    $this->artisan('schedule:list')
+        ->expectsOutputToContain('mailspoon:tidy')
+        ->assertSuccessful();
+});
+
+it('does not schedule tidying when its cron is empty', function () {
+    config(['mailspoon.schedule.tidy' => '']);
+
+    $this->artisan('schedule:list')
+        ->doesntExpectOutputToContain('mailspoon:tidy')
+        ->assertSuccessful();
+});
+
 it('does not schedule delivery when its cron is empty', function () {
     config(['mailspoon.schedule.deliver' => '']);
 

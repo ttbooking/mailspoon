@@ -10,11 +10,12 @@ use TTBooking\Mailspoon\Support\MessageArchive;
 
 uses(RefreshDatabase::class);
 
-function fakeIncomingMessage(string $id = '<id@mailspoon.test>', string $raw = 'RAW-MIME-BODY'): MessageInterface
+function fakeIncomingMessage(string $id = '<id@mailspoon.test>', string $raw = 'RAW-MIME-BODY', int $uid = 101): MessageInterface
 {
     $message = Mockery::mock(MessageInterface::class);
     $message->shouldReceive('date')->andReturn(null);
     $message->shouldReceive('messageId')->andReturn($id);
+    $message->shouldReceive('uid')->andReturn($uid);
     $message->shouldReceive('__toString')->andReturn($raw);
     // folder() is left unstubbed so source() falls back to nulls.
 
@@ -42,6 +43,7 @@ it('archives the raw message, records it as pending and marks it seen', function
     expect($record->status)->toBe(RelayedMessage::STATUS_PENDING)
         ->and($record->message_id)->toBe('<id@mailspoon.test>')
         ->and($record->mailbox)->toBe('default')
+        ->and($record->uid)->toBe(101)
         ->and($record->endpoint)->toBe('https://hook.test/mime')
         ->and($record->archive_path)->not->toBeNull();
 
@@ -169,6 +171,54 @@ it('captures the same message separately for each mailbox', function () {
         ->toBe(['https://support.test/mime', 'https://billing.test/mime'])
         // One message, two mailboxes: each copy is archived under its own path.
         ->and($records->pluck('archive_path')->unique())->toHaveCount(2);
+});
+
+it('moves a filtered message when an after action is configured', function () {
+    Storage::fake('local');
+    config([
+        'mailspoon.filters' => ['allow' => ['subject' => ['/⚡/u']]],
+        'mailspoon.after' => ['filtered' => 'move:Spam'],
+    ]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('subject')->andReturn('Обычное письмо');
+    $message->shouldReceive('markSeen')->once();
+    $message->shouldReceive('folder->mailbox->folders->firstOrCreate')->once()->with('Spam');
+    $message->shouldReceive('move')->once()->with('Spam');
+
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
+
+    expect(RelayedMessage::count())->toBe(0);
+});
+
+it('flags a filtered message as deleted when the route action says so', function () {
+    Storage::fake('local');
+    config([
+        'mailspoon.filters' => ['allow' => ['subject' => ['/⚡/u']]],
+        'mailspoon.routes' => ['default' => ['after' => ['filtered' => 'delete']]],
+    ]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('subject')->andReturn('Обычное письмо');
+    $message->shouldReceive('markSeen')->once();
+    $message->shouldReceive('markDeleted')->once();
+
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
+
+    expect(RelayedMessage::count())->toBe(0);
+});
+
+it('does not run the filtered action on a captured message', function () {
+    Storage::fake('local');
+    config(['mailspoon.after' => ['filtered' => 'delete']]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('markSeen')->once();
+    $message->shouldNotReceive('markDeleted');
+
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
+
+    expect(RelayedMessage::count())->toBe(1);
 });
 
 it('marks a filtered message seen without journaling or archiving it', function () {

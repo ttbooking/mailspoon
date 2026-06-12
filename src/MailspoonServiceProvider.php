@@ -13,6 +13,7 @@ use TTBooking\Mailspoon\Commands\DoctorCommand;
 use TTBooking\Mailspoon\Commands\ImapPullCommand;
 use TTBooking\Mailspoon\Commands\ImapSentryCommand;
 use TTBooking\Mailspoon\Commands\ReplayMessagesCommand;
+use TTBooking\Mailspoon\Commands\TidyMessagesCommand;
 use TTBooking\Mailspoon\Listeners\StoreIncomingMessage;
 use TTBooking\Mailspoon\Models\RelayedMessage;
 
@@ -50,6 +51,7 @@ final class MailspoonServiceProvider extends ServiceProvider
                 ImapSentryCommand::class,
                 DeliverMessagesCommand::class,
                 ReplayMessagesCommand::class,
+                TidyMessagesCommand::class,
                 DoctorCommand::class,
             ]);
 
@@ -66,6 +68,15 @@ final class MailspoonServiceProvider extends ServiceProvider
         // reading only stores messages — delivery happens here.
         if ($cron = config('mailspoon.schedule.deliver')) {
             $schedule->command('mailspoon:deliver')
+                ->cron($cron)
+                ->withoutOverlapping()
+                ->runInBackground();
+        }
+
+        // Apply after-relay actions to messages whose final outcome is known.
+        // Cheap no-op (no IMAP connection) when no actions are configured.
+        if ($cron = config('mailspoon.schedule.tidy')) {
+            $schedule->command('mailspoon:tidy')
                 ->cron($cron)
                 ->withoutOverlapping()
                 ->runInBackground();
