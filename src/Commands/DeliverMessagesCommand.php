@@ -9,10 +9,13 @@ use Illuminate\Container\Attributes\Config;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Random\RandomException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
+use TTBooking\Mailspoon\Events\DeliveryPermanentlyFailed;
 use TTBooking\Mailspoon\Models\RelayedMessage;
 use TTBooking\Mailspoon\Support\MailboxRoute;
 use TTBooking\Mailspoon\Support\MessageArchive;
@@ -45,6 +48,12 @@ final class DeliverMessagesCommand extends Command
     protected array $backoff = [60];
 
     /**
+     * The resolved attempt ceiling for this run; failures that reach it are
+     * terminal and announced via DeliveryPermanentlyFailed.
+     */
+    protected int $maxAttempts = 1;
+
+    /**
      * Execute the console command.
      *
      * Delivery is decoupled from mailbox reading. Each message gets a short
@@ -67,7 +76,7 @@ final class DeliverMessagesCommand extends Command
     ): int {
         $this->backoff = $backoff ?: [60];
 
-        $maxAttempts = (int) ($this->option('max-attempts') ?? $defaultMaxAttempts);
+        $maxAttempts = $this->maxAttempts = (int) ($this->option('max-attempts') ?? $defaultMaxAttempts);
 
         $messages = RelayedMessage::deliverable($maxAttempts)
             ->orderBy('id')
@@ -118,6 +127,13 @@ final class DeliverMessagesCommand extends Command
 
             try {
                 $response = Http::asForm()
+                    // Delivery is at-least-once: a timeout after the endpoint
+                    // has processed the request gets retried. These headers
+                    // let the receiver deduplicate before parsing the MIME.
+                    ->withHeaders(array_filter([
+                        'X-Mailspoon-Message-Id' => $message->message_id,
+                        'X-Mailspoon-Attempt' => (string) ($message->attempts + 1),
+                    ]))
                     ->timeout($timeout)
                     ->connectTimeout($connectTimeout)
                     ->throw()
@@ -219,12 +235,27 @@ final class DeliverMessagesCommand extends Command
 
     /**
      * Mark a message failed and schedule its next attempt with back-off.
+     *
+     * A failure that exhausts the attempt ceiling is terminal: the record
+     * stays `failed` until an operator replays it, so it is logged and
+     * announced for the host application to alert on.
      */
     protected function recordFailure(RelayedMessage $message, int $code, string $error): void
     {
         $delay = $this->backoffSeconds($message->attempts + 1);
 
         $message->markFailed($code, $error, now()->addSeconds($delay));
+
+        if ($message->attempts >= $this->maxAttempts) {
+            Log::error("Mailspoon: delivery of message [{$message->id}] permanently failed after {$message->attempts} attempt(s).", [
+                'message_id' => $message->message_id,
+                'mailbox' => $message->mailbox,
+                'endpoint' => $message->endpoint,
+                'last_error' => $message->last_error,
+            ]);
+
+            Event::dispatch(new DeliveryPermanentlyFailed($message));
+        }
     }
 
     /**
