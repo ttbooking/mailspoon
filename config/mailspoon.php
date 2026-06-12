@@ -22,12 +22,27 @@ return [
     | record when the message is captured; the signing key is resolved at
     | delivery time, so key rotation applies to pending messages immediately.
     |
+    | A route may also override the capture marker (`mark`) and replace the
+    | message filters (`filters`) for its mailbox — see the sections below.
+    |
     */
 
     'routes' => [
         // 'support' => [
+        //     // Delivery target; either one falls back to the globals above.
         //     'endpoint' => 'https://support.example.com/api/mailgun/mime',
         //     'key' => 'key-support',
+        //
+        //     // Optional: how viewed messages are marked in this mailbox
+        //     // (`seen`, `keyword:<name>` or `none`) — overrides `mark` below.
+        //     'mark' => 'keyword:Mailspoon',
+        //
+        //     // Optional: capture rules for this mailbox — replace the global
+        //     // `filters` below entirely (they are not merged).
+        //     'filters' => [
+        //         'allow' => ['subject' => ['/invoice/i']],
+        //         'deny' => ['from' => ['no-reply@*']],
+        //     ],
         // ],
     ],
 

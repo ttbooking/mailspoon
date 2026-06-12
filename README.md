@@ -149,6 +149,11 @@ MAILSPOON_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
     'support' => [
         'endpoint' => 'https://support.example.com/api/mailgun/mime',
         'key' => 'key-support',
+
+        // Необязательно: маркер просмотра и фильтры конкретно для этого
+        // ящика — переопределяют глобальные `mark` и `filters` (см. ниже).
+        'mark' => 'keyword:Mailspoon',
+        'filters' => ['allow' => ['subject' => ['/invoice/i']]],
     ],
     'billing' => [
         'endpoint' => 'https://billing.example.com/api/mailgun/mime',
@@ -156,6 +161,10 @@ MAILSPOON_KEY=key-55c5c5c5c55f55ca5cd5f55d5c555c55
     ],
 ],
 ```
+
+Опции маршрута: `endpoint` и `key` (откат на глобальные), `mark` (маркер
+просмотра, см. «Ящики-люди») и `filters` (заменяют глобальные целиком, см.
+«Фильтрация писем»).
 
 Ящик без маршрута (или с частичным маршрутом) использует глобальные
 `MAILSPOON_ENDPOINT`/`MAILSPOON_KEY`; если маршруты заданы для всех ящиков,
