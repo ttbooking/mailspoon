@@ -41,6 +41,41 @@ it('passes when configuration, archive, imap and endpoint are healthy', function
     Http::assertSent(fn ($request) => $request->method() === 'OPTIONS');
 });
 
+it('passes with a route and no global endpoint or key', function () {
+    config([
+        'mailspoon.endpoint' => null,
+        'mailspoon.key' => null,
+        'mailspoon.routes.default.endpoint' => 'https://route.test/mime',
+        'mailspoon.routes.default.key' => 'route-key',
+    ]);
+    Http::fake(['*' => Http::response('', 204)]);
+    healthyImapMock();
+
+    $this->artisan('mailspoon:doctor')
+        ->expectsOutputToContain('All checks passed.')
+        ->assertSuccessful();
+});
+
+it('resolves the route of a mailbox whose name contains dots', function () {
+    config([
+        'mailspoon.endpoint' => null,
+        'mailspoon.key' => null,
+        'mailspoon.routes' => [
+            'noreply@ttbooking.ru' => [
+                'endpoint' => 'https://dev.test/mime',
+                'key' => 'dotted-key',
+            ],
+        ],
+        'imap.mailboxes' => ['noreply@ttbooking.ru' => ['host' => 'imap.test']],
+    ]);
+    Http::fake(['*' => Http::response('', 204)]);
+    healthyImapMock('noreply@ttbooking.ru');
+
+    $this->artisan('mailspoon:doctor')
+        ->expectsOutputToContain('All checks passed.')
+        ->assertSuccessful();
+});
+
 it('fails when no endpoint is configured', function () {
     config(['mailspoon.endpoint' => null]);
     Http::fake();

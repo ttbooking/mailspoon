@@ -7,9 +7,11 @@ namespace TTBooking\Mailspoon\Listeners;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Container\Attributes\Config;
+use RuntimeException;
 use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
 use TTBooking\Mailspoon\Support\CaptureMarker;
+use TTBooking\Mailspoon\Support\MailboxRoute;
 use TTBooking\Mailspoon\Support\MessageArchive;
 use TTBooking\Mailspoon\Support\MessageMatcher;
 use UnexpectedValueException;
@@ -25,7 +27,7 @@ use UnexpectedValueException;
 final readonly class StoreIncomingMessage
 {
     public function __construct(
-        #[Config('mailspoon.endpoint')] protected string $endpoint,
+        #[Config('mailspoon.endpoint')] protected ?string $endpoint,
         protected MessageArchive $archive,
     ) {}
 
@@ -101,10 +103,22 @@ final readonly class StoreIncomingMessage
 
     /**
      * Resolve the endpoint for the given mailbox route, or the global default.
+     *
+     * The global endpoint is only a fallback: when every mailbox has its own
+     * route, it may be left unset. The message stays unmarked on failure, so
+     * it is picked up again once the configuration is fixed.
      */
     protected function endpointFor(string $mailbox): string
     {
-        return config("mailspoon.routes.{$mailbox}.endpoint") ?? $this->endpoint;
+        $endpoint = MailboxRoute::option($mailbox, 'endpoint') ?? $this->endpoint;
+
+        if ($endpoint === null) {
+            throw new RuntimeException(
+                "Mailbox [{$mailbox}] has no endpoint (no route and no global mailspoon.endpoint)."
+            );
+        }
+
+        return $endpoint;
     }
 
     /**

@@ -35,7 +35,7 @@ final readonly class CaptureMarker
     public static function for(string $mailbox): self
     {
         return self::parse(
-            config("mailspoon.routes.{$mailbox}.mark") ?? config('mailspoon.mark', self::SEEN)
+            MailboxRoute::option($mailbox, 'mark') ?? config('mailspoon.mark', self::SEEN)
         );
     }
 

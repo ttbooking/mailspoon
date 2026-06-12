@@ -14,6 +14,7 @@ use Random\RandomException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
+use TTBooking\Mailspoon\Support\MailboxRoute;
 use TTBooking\Mailspoon\Support\MessageArchive;
 
 #[AsCommand(name: 'mailspoon:deliver')]
@@ -57,7 +58,7 @@ final class DeliverMessagesCommand extends Command
      */
     public function handle(
         MessageArchive $archive,
-        #[Config('mailspoon.key')] string $key,
+        #[Config('mailspoon.key')] ?string $key,
         #[Config('mailspoon.delivery.max_attempts')] int $defaultMaxAttempts,
         #[Config('mailspoon.delivery.timeout')] int $timeout,
         #[Config('mailspoon.delivery.connect_timeout')] int $connectTimeout,
@@ -103,6 +104,15 @@ final class DeliverMessagesCommand extends Command
                 continue;
             }
 
+            $signingKey = $this->keyFor($message, $key);
+
+            if ($signingKey === null) {
+                $this->recordFailure($message, 0, 'Signing key is not configured (no route key and no global mailspoon.key).');
+                $failed++;
+
+                continue;
+            }
+
             $timestamp = now()->getTimestamp();
             $token = bin2hex(random_bytes(25));
 
@@ -116,7 +126,7 @@ final class DeliverMessagesCommand extends Command
                         'body-mime' => $raw,
                         'timestamp' => $timestamp,
                         'token' => $token,
-                        'signature' => hash_hmac('sha256', $timestamp.$token, $this->keyFor($message, $key)),
+                        'signature' => hash_hmac('sha256', $timestamp.$token, $signingKey),
                     ]);
             } catch (RequestException $e) {
                 $this->recordFailure($message, $e->response->status(), "HTTP {$e->response->status()}");
@@ -154,7 +164,7 @@ final class DeliverMessagesCommand extends Command
                 $message->status,
                 $message->attempts,
                 $message->endpoint,
-                $message->mailbox !== null && config("mailspoon.routes.{$message->mailbox}.key") !== null
+                $message->mailbox !== null && MailboxRoute::option($message->mailbox, 'key') !== null
                     ? "route:{$message->mailbox}"
                     : 'global',
                 match (true) {
@@ -178,15 +188,17 @@ final class DeliverMessagesCommand extends Command
      * Resolve the signing key for the message's mailbox route.
      *
      * Keys are never stored on the record: resolving them at delivery time
-     * means key rotation applies to pending messages immediately.
+     * means key rotation applies to pending messages immediately. The global
+     * key is only a fallback and may be unset when every mailbox has its own
+     * route key.
      */
-    protected function keyFor(RelayedMessage $message, string $default): string
+    protected function keyFor(RelayedMessage $message, ?string $default): ?string
     {
         if ($message->mailbox === null) {
             return $default;
         }
 
-        return config("mailspoon.routes.{$message->mailbox}.key") ?? $default;
+        return MailboxRoute::option($message->mailbox, 'key') ?? $default;
     }
 
     /**
