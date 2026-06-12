@@ -43,6 +43,13 @@ return [
         //         'allow' => ['subject' => ['/invoice/i']],
         //         'deny' => ['from' => ['no-reply@*']],
         //     ],
+        //
+        //     // Optional: per-outcome mailbox actions — each one overrides
+        //     // the corresponding global `after` value below.
+        //     'after' => [
+        //         'delivered' => 'move:Processed',
+        //         'failed' => 'move:Failed',
+        //     ],
         // ],
     ],
 
@@ -83,6 +90,28 @@ return [
         //     'from' => ['no-reply@*', 'mailer-daemon@*'],
         //     'header' => ['Auto-Submitted' => 'auto-replied'],
         // ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | After-Relay Actions
+    |--------------------------------------------------------------------------
+    |
+    | What happens to a message in the mailbox once its outcome is known:
+    | `none` (default), `seen`, `keyword:<name>`, `move:<folder>` or `delete`.
+    | The `filtered` action runs at capture; `delivered` and `failed` (final,
+    | after all attempts) are applied by the scheduled `mailspoon:tidy`
+    | command, which finds the message by the UID stored at capture. Target
+    | folders for `move:` are created automatically. `delete` only flags
+    | \Deleted — the message disappears on the server's next expunge.
+    | A route may override any of these per mailbox (`after` map).
+    |
+    */
+
+    'after' => [
+        'delivered' => env('MAILSPOON_AFTER_DELIVERED', 'none'),
+        'failed' => env('MAILSPOON_AFTER_FAILED', 'none'),
+        'filtered' => env('MAILSPOON_AFTER_FILTERED', 'none'),
     ],
 
     /*
@@ -179,6 +208,7 @@ return [
 
     'schedule' => [
         'deliver' => env('MAILSPOON_DELIVER_CRON', '* * * * *'),
+        'tidy' => env('MAILSPOON_TIDY_CRON', '* * * * *'),
         'prune' => env('MAILSPOON_PRUNE_CRON', '0 3 * * *'),
 
         // Mailbox name => cron expression. Override in the published config,

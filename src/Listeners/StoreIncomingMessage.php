@@ -10,6 +10,7 @@ use Illuminate\Container\Attributes\Config;
 use RuntimeException;
 use Throwable;
 use TTBooking\Mailspoon\Models\RelayedMessage;
+use TTBooking\Mailspoon\Support\AfterAction;
 use TTBooking\Mailspoon\Support\CaptureMarker;
 use TTBooking\Mailspoon\Support\MailboxRoute;
 use TTBooking\Mailspoon\Support\MessageArchive;
@@ -58,9 +59,14 @@ final readonly class StoreIncomingMessage
         $marker = CaptureMarker::for($mailbox);
 
         // A filtered message is still marked as viewed (it must not be picked
-        // up again), but never reaches the journal, archive or endpoint.
+        // up again), but never reaches the journal, archive or endpoint. Its
+        // outcome is known right here, while the connection is open, so the
+        // after-action (e.g. move:Spam) runs immediately — marker first, so
+        // the message is not re-picked even if the action fails.
         if (! MessageMatcher::for($mailbox)->passes($message)) {
             $marker->apply($message);
+
+            AfterAction::for($mailbox, 'filtered')->apply($message);
 
             return;
         }
@@ -90,6 +96,7 @@ final readonly class StoreIncomingMessage
             'mailbox' => $mailbox,
             'account' => $account,
             'folder' => $folder,
+            'uid' => $this->uid($message),
             'target' => RelayedMessage::TARGET_DEFAULT,
             'endpoint' => $this->endpointFor($mailbox),
             'status' => RelayedMessage::STATUS_PENDING,
@@ -119,6 +126,21 @@ final readonly class StoreIncomingMessage
         }
 
         return $endpoint;
+    }
+
+    /**
+     * Resolve the message UID, best-effort.
+     *
+     * `mailspoon:tidy` uses it to find the message again for after-relay
+     * actions; a message without one (e.g. a FileMessage) cannot be tidied.
+     */
+    protected function uid(MessageInterface $message): ?int
+    {
+        try {
+            return $message->uid();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**

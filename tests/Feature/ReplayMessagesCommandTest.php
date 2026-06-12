@@ -48,6 +48,14 @@ it('replays all failed messages with --failed but leaves delivered ones alone', 
         ->and($delivered->refresh()->status)->toBe(RelayedMessage::STATUS_DELIVERED);
 });
 
+it('resets the tidy state so the new outcome gets its own after-action', function () {
+    $message = storedMessage(['tidied_at' => now()]);
+
+    $this->artisan('mailspoon:replay --failed')->assertSuccessful();
+
+    expect($message->refresh()->tidied_at)->toBeNull();
+});
+
 it('replays a delivered message by its message id', function () {
     $delivered = storedMessage([
         'status' => RelayedMessage::STATUS_DELIVERED,

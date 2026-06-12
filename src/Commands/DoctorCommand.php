@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
+use TTBooking\Mailspoon\Support\AfterAction;
 use TTBooking\Mailspoon\Support\CaptureMarker;
 use TTBooking\Mailspoon\Support\MailboxRoute;
 use TTBooking\Mailspoon\Support\MessageArchive;
@@ -57,6 +58,7 @@ final class DoctorCommand extends Command
 
             $this->check('route: endpoint and signing key', fn () => $this->checkRoute($name));
             $this->check('capture: mark and filters', fn () => $this->checkCapture($name));
+            $this->check('after: relay actions', fn () => $this->checkAfter($name));
             $this->check('imap: connect and log in', fn () => $this->checkImap($name));
             $this->check(
                 $this->option('send') ? 'endpoint: signed test message' : 'endpoint: reachable',
@@ -167,6 +169,23 @@ final class DoctorCommand extends Command
         return 'mark: '.$marker->describe().($marker->mode === CaptureMarker::KEYWORD
             ? ' — the server must allow custom keywords (PERMANENTFLAGS \*)'
             : '');
+    }
+
+    /**
+     * Validate the after-relay actions for each outcome of the mailbox.
+     *
+     * Resolving an action parses it, so a malformed value fails here instead
+     * of at capture or tidy time.
+     */
+    private function checkAfter(string $name): string
+    {
+        $parts = [];
+
+        foreach (AfterAction::OUTCOMES as $outcome) {
+            $parts[] = "{$outcome}: ".AfterAction::for($name, $outcome)->describe();
+        }
+
+        return implode(', ', $parts);
     }
 
     /**
