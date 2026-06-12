@@ -87,6 +87,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Pull
+    |--------------------------------------------------------------------------
+    |
+    | `mailspoon:pull` fetches messages in bounded batches, oldest first: a
+    | single FETCH listing thousands of UIDs (a large backlog, a first run
+    | with a keyword/none marker) exceeds the server's command length limit —
+    | Dovecot rejects it with "Too long argument". The chunk size also caps
+    | how many full messages are held in memory at once.
+    |
+    */
+
+    'pull' => [
+        'chunk' => (int) env('MAILSPOON_PULL_CHUNK', 100),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Message Archive
     |--------------------------------------------------------------------------
     |

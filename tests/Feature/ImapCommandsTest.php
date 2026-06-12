@@ -10,10 +10,29 @@ use DirectoryTree\ImapEngine\Testing\FakeMessage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
+use Mockery\MockInterface;
 use TTBooking\Mailspoon\Commands\ImapPullCommand;
 use TTBooking\Mailspoon\Models\RelayCursor;
 
 uses(RefreshDatabase::class);
+
+/**
+ * Stub the chunked fetch: invoke the callback once per given message batch.
+ *
+ * @param  array<int, array<int, FakeMessage>>  $batches
+ */
+function expectsChunkedFetch(MockInterface $query, array $batches = [], ?int $size = null): void
+{
+    $query->shouldReceive('oldest')->andReturnSelf();
+    $query->shouldReceive('chunk')
+        ->once()
+        ->withArgs(fn (callable $callback, int $chunk) => $size === null || $chunk === $size)
+        ->andReturnUsing(function (callable $callback) use ($batches) {
+            foreach (array_values($batches) as $page => $messages) {
+                $callback(new MessageCollection($messages), $page + 1);
+            }
+        });
+}
 
 it('fetches flags headers and body by default', function () {
     Event::fake([MessageReceived::class]);
@@ -23,7 +42,7 @@ it('fetches flags headers and body by default', function () {
     $query->shouldReceive('withFlags')->once()->andReturnSelf();
     $query->shouldReceive('withHeaders')->once()->andReturnSelf();
     $query->shouldReceive('withBody')->once()->andReturnSelf();
-    $query->shouldReceive('get')->once()->andReturn(new MessageCollection([new FakeMessage(123)]));
+    expectsChunkedFetch($query, [[new FakeMessage(123)]]);
 
     $folder = Mockery::mock(FolderInterface::class);
     $folder->shouldReceive('messages')->once()->andReturn($query);
@@ -48,7 +67,7 @@ it('selects by unkeyword when the mailbox marker is a keyword', function () {
     $query->shouldReceive('withFlags')->andReturnSelf();
     $query->shouldReceive('withHeaders')->andReturnSelf();
     $query->shouldReceive('withBody')->andReturnSelf();
-    $query->shouldReceive('get')->andReturn(new MessageCollection);
+    expectsChunkedFetch($query);
 
     $folder = Mockery::mock(FolderInterface::class);
     $folder->shouldReceive('messages')->andReturn($query);
@@ -70,7 +89,7 @@ it('tracks a uid cursor when the marker is none', function () {
     $query->shouldReceive('withFlags')->andReturnSelf();
     $query->shouldReceive('withHeaders')->andReturnSelf();
     $query->shouldReceive('withBody')->andReturnSelf();
-    $query->shouldReceive('get')->andReturn(new MessageCollection([new FakeMessage(123)]));
+    expectsChunkedFetch($query, [[new FakeMessage(123)]]);
 
     $folder = Mockery::mock(FolderInterface::class);
     $folder->shouldReceive('messages')->andReturn($query);
@@ -112,7 +131,8 @@ it('resumes the uid cursor and restarts it when uidvalidity changes', function (
     $query->shouldReceive('withFlags')->andReturnSelf();
     $query->shouldReceive('withHeaders')->andReturnSelf();
     $query->shouldReceive('withBody')->andReturnSelf();
-    $query->shouldReceive('get')->andReturn(new MessageCollection);
+    $query->shouldReceive('oldest')->andReturnSelf();
+    $query->shouldReceive('chunk')->twice();
 
     $folder = Mockery::mock(FolderInterface::class);
     $folder->shouldReceive('messages')->andReturn($query);
@@ -133,6 +153,88 @@ it('resumes the uid cursor and restarts it when uidvalidity changes', function (
         ->and($cursor->last_uid)->toBe(0);
 });
 
+it('fetches in chunks of the configured size, oldest first', function () {
+    config(['mailspoon.pull.chunk' => 25]);
+    Event::fake([MessageReceived::class]);
+
+    $query = Mockery::mock(MessageQueryInterface::class);
+    $query->shouldReceive('unseen')->andReturnSelf();
+    $query->shouldReceive('withFlags')->andReturnSelf();
+    $query->shouldReceive('withHeaders')->andReturnSelf();
+    $query->shouldReceive('withBody')->andReturnSelf();
+    expectsChunkedFetch($query, [[new FakeMessage(1)], [new FakeMessage(2)]], size: 25);
+
+    $folder = Mockery::mock(FolderInterface::class);
+    $folder->shouldReceive('messages')->andReturn($query);
+
+    $mailbox = Mockery::mock(MailboxInterface::class);
+    $mailbox->shouldReceive('inbox')->andReturn($folder);
+
+    Imap::shouldReceive('mailbox')->with('default')->andReturn($mailbox);
+
+    $this->artisan('mailspoon:pull default')->assertSuccessful();
+
+    Event::assertDispatchedTimes(MessageReceived::class, 2);
+});
+
+it('lets the --chunk option override the configured chunk size', function () {
+    config(['mailspoon.pull.chunk' => 25]);
+
+    $query = Mockery::mock(MessageQueryInterface::class);
+    $query->shouldReceive('unseen')->andReturnSelf();
+    $query->shouldReceive('withFlags')->andReturnSelf();
+    $query->shouldReceive('withHeaders')->andReturnSelf();
+    $query->shouldReceive('withBody')->andReturnSelf();
+    expectsChunkedFetch($query, size: 5);
+
+    $folder = Mockery::mock(FolderInterface::class);
+    $folder->shouldReceive('messages')->andReturn($query);
+
+    $mailbox = Mockery::mock(MailboxInterface::class);
+    $mailbox->shouldReceive('inbox')->andReturn($folder);
+
+    Imap::shouldReceive('mailbox')->with('default')->andReturn($mailbox);
+
+    $this->artisan('mailspoon:pull default --chunk=5')->assertSuccessful();
+});
+
+it('persists the uid cursor after every chunk', function () {
+    config(['mailspoon.routes.default.mark' => 'none']);
+    Event::fake([MessageReceived::class]);
+
+    $query = Mockery::mock(MessageQueryInterface::class);
+    $query->shouldReceive('uid')->andReturnSelf();
+    $query->shouldReceive('withFlags')->andReturnSelf();
+    $query->shouldReceive('withHeaders')->andReturnSelf();
+    $query->shouldReceive('withBody')->andReturnSelf();
+
+    // An interrupted backlog run must resume from the last completed chunk:
+    // capture the persisted cursor position as each chunk finishes.
+    $positions = [];
+    $query->shouldReceive('oldest')->andReturnSelf();
+    $query->shouldReceive('chunk')->andReturnUsing(function (callable $callback) use (&$positions) {
+        foreach ([[new FakeMessage(10)], [new FakeMessage(20)]] as $page => $messages) {
+            $callback(new MessageCollection($messages), $page + 1);
+
+            $positions[] = RelayCursor::sole()->last_uid;
+        }
+    });
+
+    $folder = Mockery::mock(FolderInterface::class);
+    $folder->shouldReceive('messages')->andReturn($query);
+    $folder->shouldReceive('status')->andReturn(['UIDVALIDITY' => 7]);
+    $folder->shouldReceive('path')->andReturn('INBOX');
+
+    $mailbox = Mockery::mock(MailboxInterface::class);
+    $mailbox->shouldReceive('inbox')->andReturn($folder);
+
+    Imap::shouldReceive('mailbox')->with('default')->andReturn($mailbox);
+
+    $this->artisan('mailspoon:pull default')->assertSuccessful();
+
+    expect($positions)->toBe([10, 20]);
+});
+
 it('uses the full MIME parts when with is omitted or empty', function () {
     expect(ImapPullCommand::messageParts(null))->toBe(['flags', 'headers', 'body'])
         ->and(ImapPullCommand::messageParts(''))->toBe(['flags', 'headers', 'body'])
@@ -149,7 +251,7 @@ it('passes the default full MIME parts to pull and watch', function () {
     $query->shouldReceive('withFlags')->andReturnSelf();
     $query->shouldReceive('withHeaders')->andReturnSelf();
     $query->shouldReceive('withBody')->andReturnSelf();
-    $query->shouldReceive('get')->andReturn(new MessageCollection);
+    expectsChunkedFetch($query);
 
     $folder = Mockery::mock(FolderInterface::class);
     $folder->shouldReceive('messages')->andReturn($query);
