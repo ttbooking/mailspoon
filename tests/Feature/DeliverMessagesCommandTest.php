@@ -1,8 +1,10 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use TTBooking\Mailspoon\Events\DeliveryPermanentlyFailed;
 use TTBooking\Mailspoon\Models\RelayedMessage;
 
 uses(RefreshDatabase::class);
@@ -57,6 +59,28 @@ it('delivers a pending message with a signed payload and marks it delivered', fu
             && $request['body-mime'] === 'RAW-MIME-BODY'
             && $request['signature'] === $expected;
     });
+});
+
+it('sends the message id and attempt number as deduplication headers', function () {
+    Http::fake(['*' => Http::response('ok', 200)]);
+
+    pendingMessage();
+
+    $this->artisan('mailspoon:deliver')->assertSuccessful();
+
+    Http::assertSent(fn ($request) => $request->header('X-Mailspoon-Message-Id') === ['<id@mailspoon.test>']
+        && $request->header('X-Mailspoon-Attempt') === ['1']);
+});
+
+it('omits the message id header when the message has none', function () {
+    Http::fake(['*' => Http::response('ok', 200)]);
+
+    pendingMessage()->forceFill(['message_id' => null])->save();
+
+    $this->artisan('mailspoon:deliver')->assertSuccessful();
+
+    Http::assertSent(fn ($request) => ! $request->hasHeader('X-Mailspoon-Message-Id')
+        && $request->header('X-Mailspoon-Attempt') === ['1']);
 });
 
 it('signs each message with its mailbox route key', function () {
@@ -197,6 +221,46 @@ it('retries a transient failure in-process and delivers within a single run', fu
 
     expect($message->refresh()->status)->toBe(RelayedMessage::STATUS_DELIVERED);
     Http::assertSentCount(2);
+});
+
+it('announces a failure that exhausts the attempt ceiling', function () {
+    Http::fake(['*' => Http::response('boom', 500)]);
+    Event::fake([DeliveryPermanentlyFailed::class]);
+
+    $message = pendingMessage();
+    $message->forceFill([
+        'status' => RelayedMessage::STATUS_FAILED,
+        'attempts' => 9,
+    ])->save();
+
+    $this->artisan('mailspoon:deliver')->assertSuccessful();
+
+    expect($message->refresh()->attempts)->toBe(10);
+
+    Event::assertDispatched(DeliveryPermanentlyFailed::class,
+        fn (DeliveryPermanentlyFailed $event) => $event->message->is($message));
+});
+
+it('does not announce a failure that will still be retried', function () {
+    Http::fake(['*' => Http::response('boom', 500)]);
+    Event::fake([DeliveryPermanentlyFailed::class]);
+
+    pendingMessage();
+
+    $this->artisan('mailspoon:deliver')->assertSuccessful();
+
+    Event::assertNotDispatched(DeliveryPermanentlyFailed::class);
+});
+
+it('announces a terminal failure on the --max-attempts override', function () {
+    Http::fake(['*' => Http::response('boom', 500)]);
+    Event::fake([DeliveryPermanentlyFailed::class]);
+
+    pendingMessage();
+
+    $this->artisan('mailspoon:deliver --max-attempts=1')->assertSuccessful();
+
+    Event::assertDispatched(DeliveryPermanentlyFailed::class);
 });
 
 it('stops retrying once the maximum number of attempts is reached', function () {

@@ -3,7 +3,9 @@
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use TTBooking\Mailspoon\Events\MessageFiltered;
 use TTBooking\Mailspoon\Listeners\StoreIncomingMessage;
 use TTBooking\Mailspoon\Models\RelayedMessage;
 use TTBooking\Mailspoon\Support\MessageArchive;
@@ -183,6 +185,33 @@ it('marks a filtered message seen without journaling or archiving it', function 
 
     expect(RelayedMessage::count())->toBe(0);
     Storage::disk('local')->assertDirectoryEmpty('/');
+});
+
+it('announces a filtered message with the MessageFiltered event', function () {
+    Storage::fake('local');
+    Event::fake([MessageFiltered::class]);
+    config(['mailspoon.filters' => ['allow' => ['subject' => ['/⚡/u']]]]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('subject')->andReturn('Обычное письмо');
+    $message->shouldReceive('markSeen')->once();
+
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
+
+    Event::assertDispatched(MessageFiltered::class, fn (MessageFiltered $event) => $event->mailbox === 'default'
+        && $event->message === $message);
+});
+
+it('does not announce a captured message as filtered', function () {
+    Storage::fake('local');
+    Event::fake([MessageFiltered::class]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('markSeen')->once();
+
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
+
+    Event::assertNotDispatched(MessageFiltered::class);
 });
 
 it('captures a message that passes the subject filter', function () {

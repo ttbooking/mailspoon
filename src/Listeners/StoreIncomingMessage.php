@@ -7,8 +7,11 @@ namespace TTBooking\Mailspoon\Listeners;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Container\Attributes\Config;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
+use TTBooking\Mailspoon\Events\MessageFiltered;
 use TTBooking\Mailspoon\Models\RelayedMessage;
 use TTBooking\Mailspoon\Support\CaptureMarker;
 use TTBooking\Mailspoon\Support\MailboxRoute;
@@ -58,9 +61,17 @@ final readonly class StoreIncomingMessage
         $marker = CaptureMarker::for($mailbox);
 
         // A filtered message is still marked as viewed (it must not be picked
-        // up again), but never reaches the journal, archive or endpoint.
+        // up again), but never reaches the journal, archive or endpoint. The
+        // log line and event are its only trace.
         if (! MessageMatcher::for($mailbox)->passes($message)) {
             $marker->apply($message);
+
+            Log::info("Mailspoon: message filtered out on mailbox [{$mailbox}].", [
+                'mailbox' => $mailbox,
+                'message_id' => $messageId,
+            ]);
+
+            Event::dispatch(new MessageFiltered($message, $mailbox));
 
             return;
         }
