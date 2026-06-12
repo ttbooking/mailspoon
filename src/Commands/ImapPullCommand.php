@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace TTBooking\Mailspoon\Commands;
 
+use DirectoryTree\ImapEngine\Collections\MessageCollection;
 use DirectoryTree\ImapEngine\FolderInterface;
 use DirectoryTree\ImapEngine\Laravel\Commands\ConfigureIdleQuery;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
@@ -21,12 +22,14 @@ final class ImapPullCommand extends Command
 {
     public const DEFAULT_WITH = ['flags', 'headers', 'body'];
 
+    public const int DEFAULT_CHUNK = 100;
+
     /**
      * The name and signature of the console command.
      *
      * @var string
      */
-    protected $signature = 'mailspoon:pull {mailbox} {folder?} {--with=}';
+    protected $signature = 'mailspoon:pull {mailbox} {folder?} {--with=} {--chunk=}';
 
     /**
      * The console command description.
@@ -54,13 +57,32 @@ final class ImapPullCommand extends Command
 
         $lastUid = $cursor?->last_uid ?? 0;
 
-        foreach ($query->get() as $message) {
-            Event::dispatch(new MessageReceived($message, $name));
+        // Fetch in bounded batches, oldest first: a single FETCH listing
+        // thousands of UIDs (a fresh mailbox, a first run with a keyword/none
+        // marker) exceeds the server's command length limit — Dovecot rejects
+        // it with "Too long argument".
+        $query->oldest()->chunk(function (MessageCollection $messages) use ($name, $cursor, &$lastUid) {
+            foreach ($messages as $message) {
+                Event::dispatch(new MessageReceived($message, $name));
 
-            $lastUid = max($lastUid, $message->uid());
-        }
+                $lastUid = max($lastUid, $message->uid());
+            }
 
-        $cursor?->forceFill(['last_uid' => $lastUid])->save();
+            // Ascending order makes the cursor safe to persist per chunk: an
+            // interrupted backlog run resumes here instead of re-fetching
+            // (deduplication would drop re-captures, but not re-downloads).
+            $cursor?->forceFill(['last_uid' => $lastUid])->save();
+        }, $this->chunkSize());
+    }
+
+    /**
+     * Resolve how many messages are fetched per FETCH command.
+     */
+    protected function chunkSize(): int
+    {
+        $chunk = (int) ($this->option('chunk') ?: config('mailspoon.pull.chunk', self::DEFAULT_CHUNK));
+
+        return max(1, $chunk);
     }
 
     /**
