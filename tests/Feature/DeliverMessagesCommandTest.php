@@ -86,6 +86,56 @@ it('signs each message with its mailbox route key', function () {
     });
 });
 
+it('delivers with only a route key when no global key is configured', function () {
+    Http::fake(['*' => Http::response('ok', 200)]);
+    config(['mailspoon.key' => null, 'mailspoon.routes.support.key' => 'support-key']);
+
+    $message = pendingMessage(mailbox: 'support');
+
+    $this->artisan('mailspoon:deliver')->assertSuccessful();
+
+    expect($message->refresh()->status)->toBe(RelayedMessage::STATUS_DELIVERED);
+
+    Http::assertSent(function ($request) {
+        $expected = hash_hmac('sha256', $request['timestamp'].$request['token'], 'support-key');
+
+        return $request['signature'] === $expected;
+    });
+});
+
+it('signs with the route key of a mailbox whose name contains dots', function () {
+    Http::fake(['*' => Http::response('ok', 200)]);
+    config(['mailspoon.key' => null, 'mailspoon.routes' => [
+        'noreply@ttbooking.ru' => ['key' => 'dotted-key'],
+    ]]);
+
+    $message = pendingMessage(mailbox: 'noreply@ttbooking.ru');
+
+    $this->artisan('mailspoon:deliver')->assertSuccessful();
+
+    expect($message->refresh()->status)->toBe(RelayedMessage::STATUS_DELIVERED);
+
+    Http::assertSent(function ($request) {
+        $expected = hash_hmac('sha256', $request['timestamp'].$request['token'], 'dotted-key');
+
+        return $request['signature'] === $expected;
+    });
+});
+
+it('fails a message with no signing key without sending it', function () {
+    Http::fake();
+    config(['mailspoon.key' => null]);
+
+    $message = pendingMessage();
+
+    $this->artisan('mailspoon:deliver')->assertSuccessful();
+
+    expect($message->refresh()->status)->toBe(RelayedMessage::STATUS_FAILED)
+        ->and($message->last_error)->toContain('Signing key is not configured');
+
+    Http::assertNothingSent();
+});
+
 it('lists deliverable messages without sending or mutating on --dry-run', function () {
     Http::fake();
 

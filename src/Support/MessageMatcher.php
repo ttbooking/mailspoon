@@ -34,7 +34,7 @@ final readonly class MessageMatcher
      */
     public static function for(string $mailbox): self
     {
-        $filters = config("mailspoon.routes.{$mailbox}.filters")
+        $filters = MailboxRoute::option($mailbox, 'filters')
             ?? config('mailspoon.filters', []);
 
         return new self($filters['allow'] ?? [], $filters['deny'] ?? []);

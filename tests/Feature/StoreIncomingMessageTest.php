@@ -21,10 +21,10 @@ function fakeIncomingMessage(string $id = '<id@mailspoon.test>', string $raw = '
     return $message;
 }
 
-function makeStoreListener(): StoreIncomingMessage
+function makeStoreListener(?string $endpoint = 'https://hook.test/mime'): StoreIncomingMessage
 {
     return new StoreIncomingMessage(
-        endpoint: 'https://hook.test/mime',
+        endpoint: $endpoint,
         archive: new MessageArchive(disk: 'local', basePath: 'mailspoon'),
     );
 }
@@ -107,6 +107,45 @@ it('falls back to the global endpoint for a mailbox without a route', function (
 
     expect($record->endpoint)->toBe('https://hook.test/mime')
         ->and($record->mailbox)->toBe('billing');
+});
+
+it('captures a routed mailbox when no global endpoint is configured', function () {
+    Storage::fake('local');
+    config(['mailspoon.routes.support.endpoint' => 'https://support.test/mime']);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('markSeen')->once();
+
+    makeStoreListener(endpoint: null)->handle(new MessageReceived($message, 'support'));
+
+    expect(RelayedMessage::sole()->endpoint)->toBe('https://support.test/mime');
+});
+
+it('resolves the route of a mailbox whose name contains dots', function () {
+    Storage::fake('local');
+    config(['mailspoon.routes' => [
+        'noreply@ttbooking.ru' => ['endpoint' => 'https://dev.test/mime'],
+    ]]);
+
+    $message = fakeIncomingMessage();
+    $message->shouldReceive('markSeen')->once();
+
+    makeStoreListener(endpoint: null)->handle(new MessageReceived($message, 'noreply@ttbooking.ru'));
+
+    expect(RelayedMessage::sole()->endpoint)->toBe('https://dev.test/mime');
+});
+
+it('rejects a mailbox with no route and no global endpoint without marking it seen', function () {
+    Storage::fake('local');
+
+    $message = fakeIncomingMessage();
+    $message->shouldNotReceive('markSeen');
+
+    expect(fn () => makeStoreListener(endpoint: null)->handle(new MessageReceived($message, 'billing')))
+        ->toThrow(RuntimeException::class, 'no endpoint');
+
+    expect(RelayedMessage::count())->toBe(0);
+    Storage::disk('local')->assertDirectoryEmpty('/');
 });
 
 it('captures the same message separately for each mailbox', function () {

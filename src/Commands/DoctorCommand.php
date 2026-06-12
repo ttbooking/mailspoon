@@ -12,6 +12,7 @@ use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
 use TTBooking\Mailspoon\Support\CaptureMarker;
+use TTBooking\Mailspoon\Support\MailboxRoute;
 use TTBooking\Mailspoon\Support\MessageArchive;
 use TTBooking\Mailspoon\Support\MessageMatcher;
 
@@ -196,10 +197,18 @@ final class DoctorCommand extends Command
     {
         $endpoint = $this->endpointFor($name);
 
+        if (! $endpoint) {
+            throw new RuntimeException('cannot probe — no endpoint (see the route check)');
+        }
+
         if (! $this->option('send')) {
             $response = Http::timeout(10)->connectTimeout(5)->send('OPTIONS', $endpoint);
 
             return "reachable (HTTP {$response->status()})";
+        }
+
+        if (! ($key = $this->keyFor($name))) {
+            throw new RuntimeException('cannot sign the test message — no signing key (see the route check)');
         }
 
         $timestamp = now()->getTimestamp();
@@ -209,7 +218,7 @@ final class DoctorCommand extends Command
             'body-mime' => $this->testMime($name),
             'timestamp' => $timestamp,
             'token' => $token,
-            'signature' => hash_hmac('sha256', $timestamp.$token, (string) $this->keyFor($name)),
+            'signature' => hash_hmac('sha256', $timestamp.$token, $key),
         ]);
 
         if (! $response->successful()) {
@@ -228,7 +237,7 @@ final class DoctorCommand extends Command
             return;
         }
 
-        $source = config("mailspoon.routes.{$name}.key") !== null ? "route:{$name}" : 'global';
+        $source = MailboxRoute::option($name, 'key') !== null ? "route:{$name}" : 'global';
 
         $this->line(sprintf(
             '  signature sample (key %s, timestamp=1700000000, token=test): %s',
@@ -242,7 +251,7 @@ final class DoctorCommand extends Command
      */
     private function endpointFor(string $name): ?string
     {
-        return config("mailspoon.routes.{$name}.endpoint") ?? config('mailspoon.endpoint');
+        return MailboxRoute::option($name, 'endpoint') ?? config('mailspoon.endpoint');
     }
 
     /**
@@ -250,7 +259,7 @@ final class DoctorCommand extends Command
      */
     private function keyFor(string $name): ?string
     {
-        return config("mailspoon.routes.{$name}.key") ?? config('mailspoon.key');
+        return MailboxRoute::option($name, 'key') ?? config('mailspoon.key');
     }
 
     /**
