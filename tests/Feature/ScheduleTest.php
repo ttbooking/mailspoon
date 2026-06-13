@@ -14,6 +14,17 @@ it('schedules mailspoon:pull for each configured mailbox', function () {
         ->assertSuccessful();
 });
 
+it('does not schedule pull for a mailbox disabled in its route', function () {
+    config([
+        'mailspoon.schedule.pull' => ['default' => '*/5 * * * *'],
+        'mailspoon.routes.default.enabled' => false,
+    ]);
+
+    $this->artisan('schedule:list')
+        ->doesntExpectOutputToContain('mailspoon:pull')
+        ->assertSuccessful();
+});
+
 it('does not schedule delivery when its cron is empty', function () {
     config(['mailspoon.schedule.deliver' => '']);
 

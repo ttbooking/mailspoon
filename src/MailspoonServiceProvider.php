@@ -15,6 +15,7 @@ use TTBooking\Mailspoon\Commands\ImapSentryCommand;
 use TTBooking\Mailspoon\Commands\ReplayMessagesCommand;
 use TTBooking\Mailspoon\Listeners\StoreIncomingMessage;
 use TTBooking\Mailspoon\Models\RelayedMessage;
+use TTBooking\Mailspoon\Support\MailboxRoute;
 
 final class MailspoonServiceProvider extends ServiceProvider
 {
@@ -81,8 +82,13 @@ final class MailspoonServiceProvider extends ServiceProvider
         }
 
         // Optional cron-poll mode: pull each configured mailbox instead of
-        // running a long-lived mailspoon:sentry watcher.
+        // running a long-lived mailspoon:sentry watcher. A mailbox paused in
+        // its route (`enabled => false`) is not registered at all.
         foreach (config('mailspoon.schedule.pull', []) as $mailbox => $cron) {
+            if (! MailboxRoute::enabled($mailbox)) {
+                continue;
+            }
+
             $schedule->command('mailspoon:pull', [$mailbox])
                 ->cron($cron)
                 ->withoutOverlapping()

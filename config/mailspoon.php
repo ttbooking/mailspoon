@@ -24,6 +24,8 @@ return [
     |
     | A route may also override the capture marker (`mark`) and replace the
     | message filters (`filters`) for its mailbox — see the sections below.
+    | Set `enabled` to false to pause pulling that mailbox without removing
+    | its configuration; stored messages are still delivered.
     |
     */
 
@@ -32,6 +34,11 @@ return [
         //     // Delivery target; either one falls back to the globals above.
         //     'endpoint' => 'https://support.example.com/api/mailgun/mime',
         //     'key' => 'key-support',
+        //
+        //     // Optional: pause this mailbox. `mailspoon:pull`/`:sentry` skip
+        //     // it and the scheduler does not register its cron-poll. Already
+        //     // captured messages are still delivered. Defaults to true.
+        //     'enabled' => false,
         //
         //     // Optional: how viewed messages are marked in this mailbox
         //     // (`seen`, `keyword:<name>` or `none`) — overrides `mark` below.

@@ -58,6 +58,55 @@ it('fetches flags headers and body by default', function () {
     Event::assertDispatched(fn (MessageReceived $event) => $event->mailbox === 'default');
 });
 
+it('skips a mailbox disabled in its route', function () {
+    config(['mailspoon.routes.default.enabled' => false]);
+    Event::fake([MessageReceived::class]);
+
+    // No IMAP connection is opened for a paused mailbox.
+    Imap::shouldReceive('mailbox')->never();
+
+    $this->artisan('mailspoon:pull default')
+        ->expectsOutputToContain('disabled')
+        ->assertSuccessful();
+
+    Event::assertNotDispatched(MessageReceived::class);
+});
+
+it('skips a disabled mailbox whose name contains dots', function () {
+    // The route key is a dotted name, so it must be set as a plain array key
+    // (dot notation would nest it) — the same path MailboxRoute reads.
+    config(['mailspoon.routes' => ['noreply@example.ru' => ['enabled' => false]]]);
+    Event::fake([MessageReceived::class]);
+
+    Imap::shouldReceive('mailbox')->never();
+
+    $this->artisan('mailspoon:pull noreply@example.ru')
+        ->expectsOutputToContain('disabled')
+        ->assertSuccessful();
+
+    Event::assertNotDispatched(MessageReceived::class);
+});
+
+it('does not pull or watch a mailbox disabled in its route', function () {
+    config(['mailspoon.routes.default.enabled' => false]);
+
+    Imap::shouldReceive('mailbox')->never();
+
+    $watched = false;
+    Artisan::command(
+        'imap:watch {mailbox} {folder?} {--method=} {--with=} {--timeout=} {--attempts=} {--debug=}',
+        function () use (&$watched) {
+            $watched = true;
+        },
+    );
+
+    $this->artisan('mailspoon:sentry default')
+        ->expectsOutputToContain('disabled')
+        ->assertSuccessful();
+
+    expect($watched)->toBeFalse();
+});
+
 it('selects by unkeyword when the mailbox marker is a keyword', function () {
     config(['mailspoon.routes.default.mark' => 'keyword:Mailspoon']);
 

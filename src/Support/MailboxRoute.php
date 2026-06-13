@@ -23,4 +23,16 @@ final readonly class MailboxRoute
 
         return is_array($route) ? $route[$option] ?? null : null;
     }
+
+    /**
+     * Whether the mailbox may be pulled, or is paused by its route.
+     *
+     * A mailbox is enabled unless its route explicitly sets `enabled` to
+     * false. This pauses capture (`mailspoon:pull`/`mailspoon:sentry`) only;
+     * already-stored messages are still delivered by `mailspoon:deliver`.
+     */
+    public static function enabled(string $mailbox): bool
+    {
+        return self::option($mailbox, 'enabled') !== false;
+    }
 }
