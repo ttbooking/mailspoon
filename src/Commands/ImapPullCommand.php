@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Event;
 use Symfony\Component\Console\Attribute\AsCommand;
 use TTBooking\Mailspoon\Models\RelayCursor;
 use TTBooking\Mailspoon\Support\CaptureMarker;
+use TTBooking\Mailspoon\Support\MailboxRoute;
 
 #[AsCommand(name: 'mailspoon:pull')]
 final class ImapPullCommand extends Command
@@ -43,7 +44,17 @@ final class ImapPullCommand extends Command
      */
     public function handle(): void
     {
-        $mailbox = Imap::mailbox($name = $this->argument('mailbox'));
+        $name = $this->argument('mailbox');
+
+        // A paused mailbox is left untouched: no connection, no cursor advance.
+        // Messages already captured are still delivered by mailspoon:deliver.
+        if (! MailboxRoute::enabled($name)) {
+            $this->warn("Mailbox [$name] is disabled in its route; skipping pull.");
+
+            return;
+        }
+
+        $mailbox = Imap::mailbox($name);
 
         $with = self::messageParts($this->option('with'));
 
