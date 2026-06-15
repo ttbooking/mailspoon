@@ -37,7 +37,7 @@ final class ReplayMessagesCommand extends Command
         $criteria = new ReplayCriteria(
             ids: $this->argument('id'),
             failed: (bool) $this->option('failed'),
-            mailbox: $this->option('mailbox'),
+            mailbox: $this->option('mailbox') ?: null,
         );
 
         if (! $criteria->selectsAnything()) {

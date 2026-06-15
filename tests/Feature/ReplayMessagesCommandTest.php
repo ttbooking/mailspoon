@@ -75,6 +75,16 @@ it('limits --failed replay to one mailbox', function () {
         ->and($billing->refresh()->status)->toBe(RelayedMessage::STATUS_FAILED);
 });
 
+it('treats an empty --mailbox as no mailbox filter', function () {
+    $support = storedMessage(['mailbox' => 'support']);
+    $billing = storedMessage(['mailbox' => 'billing']);
+
+    $this->artisan('mailspoon:replay --failed --mailbox=')->assertSuccessful();
+
+    expect($support->refresh()->status)->toBe(RelayedMessage::STATUS_PENDING)
+        ->and($billing->refresh()->status)->toBe(RelayedMessage::STATUS_PENDING);
+});
+
 it('requires message ids or --failed', function () {
     storedMessage();
 
