@@ -552,6 +552,43 @@ php artisan mailspoon:doctor --send           # + подписанное тес�
 принимающее приложение); `--send` отправляет полноценное подписанное письмо с
 заголовком `X-Mailspoon-Doctor: true` и требует ответа 2xx.
 
+## Вызов операций из приложения (сервисы)
+
+За командами `mailspoon:doctor`/`:replay`/`:deliver` стоят сервисы, которые
+можно вызвать из своего кода (контроллера, Job'а) и получить **структурный**
+результат вместо текста консоли — удобно, когда ящики и маршруты заводятся
+динамически (см. «Маршруты из хранилища») и обслуживаются из веб-интерфейса.
+Mailspoon HTTP-слой не шипит: контроллеры и UI строит хост, ниже — примеры.
+
+Каждый результат реализует `Arrayable`/`JsonSerializable`, поэтому годится прямо
+для `response()->json()`.
+
+```php
+use TTBooking\Mailspoon\Services\Doctor;
+use TTBooking\Mailspoon\Services\Replay;
+use TTBooking\Mailspoon\Services\ReplayCriteria;
+use TTBooking\Mailspoon\Services\Deliverer;
+
+// Диагностика — DoctorReport со списком проверок (mailbox/name/status/message).
+$report = app(Doctor::class)->run(['support']);   // пусто = все ящики; ->run([], send: true) — с подписанным письмом
+return response()->json($report);                  // { "ok": false, "checks": [ ... ] }
+
+// Переотправка — ReplayResult { count, messages: [...] }.
+$result = app(Replay::class)->run(new ReplayCriteria(failed: true, mailbox: 'support'));
+// Пустой критерий (ни id, ни failed) бросает InvalidArgumentException — мапьте в 422.
+
+// Принудительный флаш — DeliverySummary { delivered, failed, total }.
+$summary = app(Deliverer::class)->run(limit: 50);
+```
+
+На что обратить внимание:
+
+- **`Doctor` и `Deliverer` делают сетевые операции** (IMAP-логин, HTTP-проба или
+  доставка) синхронно и с таймаутами — в вебе запускайте их через очередь/Job, а
+  не в реквест-цикле.
+- **`Replay` и `Deliverer` меняют данные** (сбрасывают/доставляют записи) —
+  авторизацию таких действий обеспечивает хост.
+
 ## События
 
 Реле остаётся «тупой трубой»: оно не шлёт уведомлений и не строит метрик, но
