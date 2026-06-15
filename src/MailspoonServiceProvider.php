@@ -86,11 +86,13 @@ final class MailspoonServiceProvider extends ServiceProvider
                 ->runInBackground();
         }
 
-        // Optional cron-poll mode: pull each configured mailbox instead of
-        // running a long-lived mailspoon:sentry watcher. A mailbox paused in
-        // its route (`enabled => false`) is not registered at all.
-        foreach (config('mailspoon.schedule.pull', []) as $mailbox => $cron) {
-            if (! Mailspoon::route($mailbox)->enabled()) {
+        // Optional cron-poll mode: pull each scheduled mailbox instead of
+        // running a long-lived mailspoon:sentry watcher. The schedule map comes
+        // from the route registry (config or runtime registrations), so a host
+        // can poll a registered mailbox without editing config. A mailbox
+        // paused in its route (`enabled => false`) is not registered at all.
+        foreach (Mailspoon::schedules() as $mailbox => $cron) {
+            if (empty($cron) || ! Mailspoon::route($mailbox)->enabled()) {
                 continue;
             }
 

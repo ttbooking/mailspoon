@@ -161,23 +161,30 @@ public static function enabled(string $mailbox): bool
 `CaptureMarker`, `MessageMatcher`, `DoctorCommand` — они уже ходят через
 `MailboxRoute`.
 
-### Планировщик идёт по реестру
+### Планировщик идёт по реестру ✅
 
-Вместо `config('mailspoon.schedule.pull')` провайдер перечисляет маршруты с
-расписанием:
+Реализовано. `MailspoonManager::schedules()` собирает карту `ящик => cron` из
+двух источников: legacy-карты `config('mailspoon.schedule.pull')` (обратная
+совместимость — конфиг не ломаем) и любого маршрута с ключом `schedule` (из
+конфига или рантайм-регистрации; route-level имеет приоритет для своего ящика).
+Провайдер идёт по этой карте:
 
 ```php
-foreach (Mailspoon::routes() as $mailbox => $route) {
-    if (empty($route['schedule']) || ! MailboxRoute::enabled($mailbox)) {
+foreach (Mailspoon::schedules() as $mailbox => $cron) {
+    if (empty($cron) || ! Mailspoon::route($mailbox)->enabled()) {
         continue;
     }
 
     $schedule->command('mailspoon:pull', [$mailbox])
-        ->cron($route['schedule'])
+        ->cron($cron)
         ->withoutOverlapping()
         ->runInBackground();
 }
 ```
+
+Так ящик, зарегистрированный хостом через
+`Mailspoon::register('tenant', ['schedule' => '*/5 * * * *'])`, начинает
+опрашиваться по cron без правки конфига.
 
 `callAfterResolving(Schedule::class, ...)` выполняется на каждом `schedule:run`
 после загрузки всех провайдеров, поэтому маршруты, зарегистрированные хостом в
@@ -239,24 +246,30 @@ public function boot(): void
 
 ## План реализации
 
-### Этап 1 — менеджер и фасад
-- [ ] `src/MailspoonManager.php` — реестр + `register()`/`route()`/`routes()`.
-- [ ] `src/Facades/Mailspoon.php` — фасад на менеджер.
-- [ ] `MailspoonServiceProvider::register()` — `singleton(MailspoonManager)` с
-      сидированием из `mailspoon.routes` и `mailspoon.schedule.pull`.
+### Этап 1 — менеджер, фасад, контракт ✅
+- [x] `src/MailspoonManager.php` — реестр + `register()`/`route()`/`routes()`/
+      `schedules()`; забинжен синглтоном, конфиг читается живьём (не снимок).
+- [x] `src/Facades/Mailspoon.php` — фасад на менеджер.
+- [x] `src/Contracts/Route.php` — `route()` возвращает объект `Route`
+      (`endpoint`/`key`/`definesKey`/`enabled`/`marker`/`matcher`).
+- [x] `MailspoonServiceProvider::register()` — `singleton(MailspoonManager)`.
 
-### Этап 2 — прокладка
-- [ ] `MailboxRoute::option()`/`enabled()` спрашивают `Mailspoon::route()`.
-- [ ] `MailspoonServiceProvider::schedule()` идёт по `Mailspoon::routes()` с
-      ключом `schedule` вместо `config('mailspoon.schedule.pull')`.
-- [ ] Проверить, что `StoreIncomingMessage`, `DeliverMessagesCommand`,
-      `CaptureMarker`, `MessageMatcher`, `DoctorCommand` правок не требуют.
+### Этап 2 — прокладка ✅
+- [x] `MailboxRoute` стал реализацией `Route` — чистый value-объект
+      `(options, defaults)`, без `config()` внутри (читает менеджер).
+- [x] `CaptureMarker::for()`/`MessageMatcher::for()` и `#[Config]` endpoint/key
+      в листенере/команде удалены — резолвинг переехал в `Route`.
+- [x] `MailspoonServiceProvider::schedule()` идёт по `Mailspoon::schedules()`
+      (legacy `schedule.pull` + route-level `schedule`).
+- [x] `StoreIncomingMessage`, `DeliverMessagesCommand`, `DoctorCommand`,
+      `ImapPullCommand`, `ImapSentryCommand` переведены на `Mailspoon::route()`.
 
-### Этап 3 — тесты
-- [ ] Юнит: менеджер сидируется из конфига; `register()` переопределяет маршрут;
-      `schedule.pull` сворачивается в `route.schedule` (паритет).
-- [ ] Feature: `Mailspoon::register()` в тесте → захват берёт `endpoint`/`mark`/
-      `filters`, доставка — `key`, планировщик — маршруты с `schedule`/`enabled`.
+### Этап 3 — тесты ✅
+- [x] `MailspoonManagerTest` — резолв из конфига, рантайм-override, замена-не-
+      merge, `routes()`, `schedules()`, фасад на синглтон.
+- [x] `MailboxRouteTest` — чистый value-объект на голых массивах.
+- [x] `ScheduleTest` — pull по route-level `schedule` (конфиг и рантайм),
+      пауза `enabled => false`.
 
 ### Этап 4 — документация
 - [ ] README: раздел «Регистрация маршрутов в рантайме» — `Mailspoon::register()`

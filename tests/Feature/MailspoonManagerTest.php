@@ -82,6 +82,30 @@ it('treats a mailbox as enabled unless its route disables it', function () {
     expect(Mailspoon::route('paused')->enabled())->toBeFalse();
 });
 
+it('assembles pull schedules from the config map and route schedules', function () {
+    config([
+        'mailspoon.schedule.pull' => ['legacy' => '0 * * * *'],
+        'mailspoon.routes' => ['support' => ['schedule' => '*/10 * * * *']],
+    ]);
+
+    Mailspoon::register('tenant', ['schedule' => '*/5 * * * *']);
+
+    expect(Mailspoon::schedules())->toBe([
+        'legacy' => '0 * * * *',
+        'support' => '*/10 * * * *',
+        'tenant' => '*/5 * * * *',
+    ]);
+});
+
+it('lets a route schedule override a legacy pull entry for the same mailbox', function () {
+    config([
+        'mailspoon.schedule.pull' => ['default' => '0 * * * *'],
+        'mailspoon.routes' => ['default' => ['schedule' => '*/5 * * * *']],
+    ]);
+
+    expect(Mailspoon::schedules()['default'])->toBe('*/5 * * * *');
+});
+
 it('resolves the facade to the singleton manager', function () {
     Mailspoon::register('x', ['key' => 'y']);
 

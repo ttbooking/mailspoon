@@ -78,4 +78,28 @@ final class MailspoonManager
     {
         return array_merge(config('mailspoon.routes', []), $this->routes);
     }
+
+    /**
+     * Mailboxes to poll on a schedule, as `mailbox => cron expression`.
+     *
+     * Assembled from the legacy `schedule.pull` config map and any route that
+     * carries its own `schedule` (from config or a runtime registration), so a
+     * host can start polling a registered mailbox without editing config. A
+     * route-level schedule takes precedence over the legacy map entry for the
+     * same mailbox.
+     *
+     * @return array<string, string>
+     */
+    public function schedules(): array
+    {
+        $schedules = config('mailspoon.schedule.pull', []);
+
+        foreach ($this->routes() as $mailbox => $options) {
+            if (isset($options['schedule'])) {
+                $schedules[$mailbox] = $options['schedule'];
+            }
+        }
+
+        return $schedules;
+    }
 }
