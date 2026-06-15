@@ -34,7 +34,7 @@
 | [21](21-paket-laravel.md) | Laravel-пакет | Конверсия в composer-пакет: публикуемые конфиги вместо env-JSON | 🔴 высокий | 🔶 3.0.0 |
 | [22](22-yashchiki-lyudi.md) | Ящики-люди | Захват без пометки прочитанным: курсор-keyword/UID вместо `\Seen` | 🔴 высокий | ✅ 3.3.0 |
 | [23](23-nablyudaemost-filtra.md) | Наблюдаемость фильтра | `filter-test` (сухой прогон правил) + опц. журнал отфильтрованного | 🟢 низкий | ⬜ |
-| [24](24-nastroyki-iz-hranilishcha.md) | Настройки из хранилища | `MailspoonManager` + `Mailspoon::register()` — маршруты из рантайма/БД (по аналогии с `Imap`) | 🟡 средний | ⬜ |
+| [24](24-nastroyki-iz-hranilishcha.md) | Настройки из хранилища | `MailspoonManager` + `Mailspoon::register()` — маршруты из рантайма/БД (по аналогии с `Imap`) | 🟡 средний | ✅ |
 
 ## Сводный взгляд
 

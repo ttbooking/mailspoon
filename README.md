@@ -346,6 +346,76 @@ MAILSPOON_MAX_ATTEMPTS=10          # сколько попыток достав�
 Опубликованный конфиг должен сохранять полную структуру секций: merge с
 дефолтами пакета выполняется только по верхнему уровню.
 
+### Маршруты из хранилища (`Mailspoon::register()`)
+
+Если набор ящиков не статичен — например, приложение использует Mailspoon как
+читца почты и каждый клиент регистрирует свой ящик и вебхук через UI, — маршруты
+можно задавать в рантайме, не редактируя `config/mailspoon.php`. Фасад
+`Mailspoon` повторяет `Imap` из imapengine: метод `register()` добавляет или
+переопределяет маршрут для ящика.
+
+```php
+use TTBooking\Mailspoon\Facades\Mailspoon;
+
+Mailspoon::register('tenant-42', [
+    'endpoint' => 'https://tenant-42.example.com/api/mailgun/mime',
+    'key' => 'key-42',
+    'schedule' => '*/5 * * * *',   // cron-poll этого ящика (как запись schedule.pull)
+    'enabled' => true,             // та же семантика, что у маршрута в конфиге
+    'mark' => 'keyword:Mailspoon',
+    'filters' => ['allow' => ['subject' => ['/invoice/i']]],
+]);
+```
+
+Зарегистрированный маршрут имеет приоритет над одноимённым в конфиге и **заменяет
+его целиком** (не сливается). Опции — те же, что в карте `routes`, плюс
+необязательный `schedule`: ящик с расписанием попадает в cron-poll наравне с
+записями `schedule.pull`, так что новый ящик начинает опрашиваться без правки
+конфига. Семантика времени прежняя: `endpoint` фиксируется при захвате, `key`
+выбирается при доставке, `mark`/`filters` — при захвате.
+
+### Динамические IMAP-подключения (`Imap::register()`)
+
+Маршрут описывает доставку. Чтобы pull-режим тоже работал из хранилища, ящику
+нужно само IMAP-подключение: `mailspoon:pull`/`:sentry` соединяются через
+`Imap::mailbox($name)`, который резолвит `config/imap.php`. Своей абстракции для
+этого не нужно — у imapengine есть публичный `Imap::register($name, $config)`,
+кладущий подключение в его менеджер на время процесса. Регистрируйте подключение
+и маршрут рядом, в `boot()` своего сервис-провайдера:
+
+```php
+use DirectoryTree\ImapEngine\Laravel\Facades\Imap;
+use TTBooking\Mailspoon\Facades\Mailspoon;
+
+public function boot(): void
+{
+    // Выполняется в каждом процессе, включая фоновый mailspoon:pull из
+    // планировщика, — поэтому подключение доступно и там.
+    foreach (Mailbox::all() as $box) {            // ваша Eloquent-модель
+        Imap::register($box->mailbox, $box->imap_config);    // подключение
+        Mailspoon::register($box->mailbox, [                 // доставка + опрос
+            'endpoint' => $box->endpoint,
+            'key' => $box->key,
+            'schedule' => $box->poll_cron,
+            'enabled' => $box->enabled,
+        ]);
+    }
+}
+```
+
+Так покрыты все точки входа: `mailspoon:pull` (в т.ч. фоновый), `mailspoon:sentry`
+(регистрация в одном процессе переживает вложенные `pull` и vendor `imap:watch`)
+и `mailspoon:deliver` (к IMAP не обращается).
+
+Что учесть:
+
+- **`boot()` выполняется на каждый процесс** — кэшируйте выборку из БД либо
+  регистрируйте только под `runningInConsole()`/нужные команды, чтобы не делать
+  запрос на каждый веб-реквест.
+- **IMAP-пароли в БД** храните через encrypted-cast.
+- **Прямой запуск vendor `imap:watch`** мимо команд Mailspoon подключение из БД
+  не получит — регистрируйте его сами или держите ящик в `config/imap.php`.
+
 ## Использование
 
 Mailspoon предоставляет команды чтения (`mailspoon:pull`, `mailspoon:sentry`)
