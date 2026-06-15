@@ -1,5 +1,7 @@
 <?php
 
+use TTBooking\Mailspoon\Facades\Mailspoon;
+
 it('schedules mailspoon:deliver by default', function () {
     $this->artisan('schedule:list')
         ->expectsOutputToContain('mailspoon:deliver')
@@ -19,6 +21,30 @@ it('does not schedule pull for a mailbox disabled in its route', function () {
         'mailspoon.schedule.pull' => ['default' => '*/5 * * * *'],
         'mailspoon.routes.default.enabled' => false,
     ]);
+
+    $this->artisan('schedule:list')
+        ->doesntExpectOutputToContain('mailspoon:pull')
+        ->assertSuccessful();
+});
+
+it('schedules pull for a route that carries its own schedule', function () {
+    config(['mailspoon.routes.support.schedule' => '*/10 * * * *']);
+
+    $this->artisan('schedule:list')
+        ->expectsOutputToContain('mailspoon:pull')
+        ->assertSuccessful();
+});
+
+it('schedules pull for a mailbox registered at runtime', function () {
+    Mailspoon::register('tenant', ['schedule' => '*/5 * * * *']);
+
+    $this->artisan('schedule:list')
+        ->expectsOutputToContain('mailspoon:pull')
+        ->assertSuccessful();
+});
+
+it('does not schedule pull for a scheduled but disabled route', function () {
+    Mailspoon::register('tenant', ['schedule' => '*/5 * * * *', 'enabled' => false]);
 
     $this->artisan('schedule:list')
         ->doesntExpectOutputToContain('mailspoon:pull')

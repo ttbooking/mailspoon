@@ -1,6 +1,7 @@
 <?php
 
 use DirectoryTree\ImapEngine\MessageInterface;
+use TTBooking\Mailspoon\Facades\Mailspoon;
 use TTBooking\Mailspoon\Support\CaptureMarker;
 
 it('parses the supported marker modes', function () {
@@ -44,6 +45,6 @@ it('prefers the route marker over the global one', function () {
         'mailspoon.routes.operators.mark' => 'keyword:Mailspoon',
     ]);
 
-    expect(CaptureMarker::for('operators')->mode)->toBe(CaptureMarker::KEYWORD)
-        ->and(CaptureMarker::for('other')->mode)->toBe(CaptureMarker::SEEN);
+    expect(Mailspoon::route('operators')->marker()->mode)->toBe(CaptureMarker::KEYWORD)
+        ->and(Mailspoon::route('other')->marker()->mode)->toBe(CaptureMarker::SEEN);
 });

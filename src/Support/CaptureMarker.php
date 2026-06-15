@@ -30,16 +30,6 @@ final readonly class CaptureMarker
     ) {}
 
     /**
-     * Resolve the marker for a mailbox: its route `mark`, or the global one.
-     */
-    public static function for(string $mailbox): self
-    {
-        return self::parse(
-            MailboxRoute::option($mailbox, 'mark') ?? config('mailspoon.mark', self::SEEN)
-        );
-    }
-
-    /**
      * Parse a `mark` configuration value.
      */
     public static function parse(string $mark): self

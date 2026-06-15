@@ -44,6 +44,11 @@ return [
         //     // (`seen`, `keyword:<name>` or `none`) — overrides `mark` below.
         //     'mark' => 'keyword:Mailspoon',
         //
+        //     // Optional: cron-poll this mailbox with `mailspoon:pull`. Same
+        //     // effect as a `schedule.pull` entry below, but kept with the
+        //     // route — convenient when routes are registered at runtime.
+        //     'schedule' => '*/5 * * * *',
+        //
         //     // Optional: capture rules for this mailbox — replace the global
         //     // `filters` below entirely (they are not merged).
         //     'filters' => [
@@ -180,7 +185,8 @@ return [
     | flushed in every mode. The `pull` map lets you poll mailboxes with
     | `mailspoon:pull` instead of running a long-lived `mailspoon:sentry`
     | watcher; it is empty by default. Set a cron value to empty to disable a
-    | task.
+    | task. A route may carry its own `schedule` instead of an entry here (it
+    | takes precedence for that mailbox).
     |
     */
 

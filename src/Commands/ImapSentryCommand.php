@@ -6,7 +6,7 @@ namespace TTBooking\Mailspoon\Commands;
 
 use Illuminate\Console\Command;
 use Symfony\Component\Console\Attribute\AsCommand;
-use TTBooking\Mailspoon\Support\MailboxRoute;
+use TTBooking\Mailspoon\Facades\Mailspoon;
 
 #[AsCommand(name: 'mailspoon:sentry')]
 final class ImapSentryCommand extends Command
@@ -31,7 +31,7 @@ final class ImapSentryCommand extends Command
     public function handle(): void
     {
         // A paused mailbox is neither pulled nor watched (no IDLE connection).
-        if (! MailboxRoute::enabled($name = $this->argument('mailbox'))) {
+        if (! Mailspoon::route($name = $this->argument('mailbox'))->enabled()) {
             $this->warn("Mailbox [$name] is disabled in its route; not watching.");
 
             return;

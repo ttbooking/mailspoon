@@ -13,9 +13,9 @@ use TTBooking\Mailspoon\Commands\DoctorCommand;
 use TTBooking\Mailspoon\Commands\ImapPullCommand;
 use TTBooking\Mailspoon\Commands\ImapSentryCommand;
 use TTBooking\Mailspoon\Commands\ReplayMessagesCommand;
+use TTBooking\Mailspoon\Facades\Mailspoon;
 use TTBooking\Mailspoon\Listeners\StoreIncomingMessage;
 use TTBooking\Mailspoon\Models\RelayedMessage;
-use TTBooking\Mailspoon\Support\MailboxRoute;
 
 final class MailspoonServiceProvider extends ServiceProvider
 {
@@ -25,6 +25,11 @@ final class MailspoonServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/mailspoon.php', 'mailspoon');
+
+        // Runtime route registry. Routes are read from config by default and
+        // can be added or overridden at runtime via Mailspoon::register(),
+        // letting a host application drive them from its own storage.
+        $this->app->singleton(MailspoonManager::class);
     }
 
     /**
@@ -81,11 +86,13 @@ final class MailspoonServiceProvider extends ServiceProvider
                 ->runInBackground();
         }
 
-        // Optional cron-poll mode: pull each configured mailbox instead of
-        // running a long-lived mailspoon:sentry watcher. A mailbox paused in
-        // its route (`enabled => false`) is not registered at all.
-        foreach (config('mailspoon.schedule.pull', []) as $mailbox => $cron) {
-            if (! MailboxRoute::enabled($mailbox)) {
+        // Optional cron-poll mode: pull each scheduled mailbox instead of
+        // running a long-lived mailspoon:sentry watcher. The schedule map comes
+        // from the route registry (config or runtime registrations), so a host
+        // can poll a registered mailbox without editing config. A mailbox
+        // paused in its route (`enabled => false`) is not registered at all.
+        foreach (Mailspoon::schedules() as $mailbox => $cron) {
+            if (empty($cron) || ! Mailspoon::route($mailbox)->enabled()) {
                 continue;
             }
 
