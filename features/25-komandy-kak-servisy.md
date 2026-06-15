@@ -2,10 +2,11 @@
 
 **Приоритет:** 🟡 средний · **Трудоёмкость:** M
 
-> ⬜ Предложение. Вытекает из #24: раз ящики и маршруты заводятся динамически
-> (в т.ч. из веб-интерфейса хоста), их хочется оттуда же диагностировать и
-> переотправлять — то есть вызывать логику команд программно и получать
-> **структурный** результат, а не скрапить вывод консоли.
+> ✅ Реализовано: сервисы `Doctor`/`Replay`/`Deliverer` со структурными
+> результатами (`DoctorReport`/`ReplayResult`/`DeliverySummary`, все
+> `Arrayable`+`JsonSerializable`); команды стали тонкими адаптерами. Вытекает
+> из #24: динамические ящики обслуживаются программно (из веб-слоя хоста), без
+> скрапинга консоли. Пакет HTTP-слой не шипит — контроллеры строит хост.
 
 ## Проблема
 
@@ -135,22 +136,29 @@ public function show(Doctor $doctor, string $mailbox)
 
 ## План реализации
 
-### Этап 1 — Doctor (наибольшая отдача)
-- [ ] `Services/Doctor`, `Results/DoctorReport` + `MailboxCheck` + `CheckStatus`.
-- [ ] Перенести логику из `DoctorCommand` в сервис; команда рендерит отчёт.
-- [ ] Тесты: сервис возвращает корректные статусы (route/capture/imap/endpoint),
-      в т.ч. на упавшей проверке (не бросает); тест команды — рендер отчёта.
+### Этап 1 — Doctor (наибольшая отдача) ✅
+- [x] `Services/Doctor`, `Results/DoctorReport` + `Check` + `CheckStatus`
+      (общий `Check` с `mailbox: ?string` вместо `MailboxCheck` — покрывает и
+      общие проверки database/archive).
+- [x] Логика перенесена из `DoctorCommand` в сервис; команда рендерит отчёт.
+- [x] Тесты: `DoctorTest` (статусы, упавшая проверка не прерывает прогон, JSON);
+      `DoctorCommandTest` (рендер) зелёный без правок.
 
-### Этап 2 — Replay
-- [ ] `Services/Replay`, `Results/ReplayResult` (+ критерий выборки).
-- [ ] `ReplayMessagesCommand` → адаптер; CLI-поведение без изменений.
-- [ ] Тесты сервиса (выборка по id/failed/mailbox, счётчик, список).
+### Этап 2 — Replay ✅
+- [x] `Services/Replay` + `ReplayCriteria`, `Results/ReplayResult` + `ReplayedEntry`.
+- [x] `ReplayMessagesCommand` → адаптер; CLI-поведение и exit-коды без изменений.
+- [x] `ReplayTest` (выборка по id/failed/mailbox, бросок при пустом критерии,
+      пустой результат, JSON); `ReplayMessagesCommandTest` зелёный без правок.
 
-### Этап 3 — (опц.) Deliverer + документация
-- [ ] При необходимости `Services/Deliverer` → `DeliverySummary`.
-- [ ] README: раздел «Вызов операций из приложения» — пример контроллера,
-      `response()->json($report)`, рекомендация гонять `Doctor`/`Deliver` через
-      очередь, заметка про авторизацию `Replay`.
+### Этап 3 — Deliverer + документация ✅
+- [x] `Services/Deliverer` → `Results/DeliverySummary` (delivered/failed/total);
+      `pending()` для dry-run-выборки без побочек. Ретраи/бэкофф/события и
+      `DeliveryPermanentlyFailed` переехали в сервис; команда — адаптер,
+      dry-run-таблица осталась в команде.
+- [x] `DelivererTest`; `DeliverMessagesCommandTest` зелёный без правок.
+- [x] README: раздел «Вызов операций из приложения» — примеры `Doctor`/`Replay`/
+      `Deliverer`, `response()->json()`, рекомендация про очередь и авторизацию,
+      напоминание что пакет HTTP-слой не шипит.
 
 ## Версионирование
 
@@ -159,9 +167,9 @@ API (сервисы, формы результатов) → **minor**. Паке�
 
 ## Definition of Done
 
-- [ ] `Doctor`/`Replay` доступны как сервисы, возвращают структурный результат,
-      пригодный для `response()->json()`.
-- [ ] Команды `mailspoon:doctor`/`:replay` работают как раньше (рендер поверх
-      сервисов), их тесты зелёные.
-- [ ] Тесты сервисов с ассертами по объектам результата.
-- [ ] README: вызов операций из приложения, заметки про очередь и авторизацию.
+- [x] `Doctor`/`Replay`/`Deliverer` доступны как сервисы, возвращают структурный
+      результат, пригодный для `response()->json()`.
+- [x] Команды `mailspoon:doctor`/`:replay`/`:deliver` работают как раньше (рендер
+      поверх сервисов), их тесты зелёные.
+- [x] Тесты сервисов с ассертами по объектам результата.
+- [x] README: вызов операций из приложения, заметки про очередь и авторизацию.

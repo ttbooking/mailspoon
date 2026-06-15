@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace TTBooking\Mailspoon\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\Console\Attribute\AsCommand;
-use TTBooking\Mailspoon\Models\RelayedMessage;
+use TTBooking\Mailspoon\Services\Replay;
+use TTBooking\Mailspoon\Services\ReplayCriteria;
 
 #[AsCommand(name: 'mailspoon:replay')]
 final class ReplayMessagesCommand extends Command
@@ -32,39 +32,35 @@ final class ReplayMessagesCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(): int
+    public function handle(Replay $replay): int
     {
-        $ids = $this->argument('id');
+        $criteria = new ReplayCriteria(
+            ids: $this->argument('id'),
+            failed: (bool) $this->option('failed'),
+            mailbox: $this->option('mailbox') ?: null,
+        );
 
-        if (! $ids && ! $this->option('failed')) {
+        if (! $criteria->selectsAnything()) {
             $this->error('Nothing selected: pass message ids or use --failed.');
 
             return self::INVALID;
         }
 
-        $messages = RelayedMessage::query()
-            ->when($ids, fn (Builder $query) => $query->where(
-                fn (Builder $query) => $query->whereIn('message_id', $ids)->orWhereIn('fingerprint', $ids)
-            ))
-            ->when($this->option('failed'), fn (Builder $query) => $query->where('status', RelayedMessage::STATUS_FAILED))
-            ->when($this->option('mailbox'), fn (Builder $query, string $mailbox) => $query->where('mailbox', $mailbox))
-            ->get();
+        $result = $replay->run($criteria);
 
-        if ($messages->isEmpty()) {
+        if ($result->isEmpty()) {
             $this->info('Nothing to replay.');
 
             return self::SUCCESS;
         }
 
-        foreach ($messages as $message) {
-            $message->replay();
-
-            $this->line("Replayed [{$message->fingerprint}] from [{$message->mailbox}]: {$message->endpoint}");
+        foreach ($result->entries as $entry) {
+            $this->line("Replayed [{$entry->fingerprint}] from [{$entry->mailbox}]: {$entry->endpoint}");
         }
 
         $this->info(sprintf(
             'Replayed %d message(s); they will go out on the next mailspoon:deliver run.',
-            $messages->count(),
+            $result->count(),
         ));
 
         return self::SUCCESS;
