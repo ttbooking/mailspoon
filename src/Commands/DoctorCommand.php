@@ -11,10 +11,9 @@ use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
+use TTBooking\Mailspoon\Facades\Mailspoon;
 use TTBooking\Mailspoon\Support\CaptureMarker;
-use TTBooking\Mailspoon\Support\MailboxRoute;
 use TTBooking\Mailspoon\Support\MessageArchive;
-use TTBooking\Mailspoon\Support\MessageMatcher;
 
 #[AsCommand(name: 'mailspoon:doctor')]
 final class DoctorCommand extends Command
@@ -160,9 +159,12 @@ final class DoctorCommand extends Command
      */
     private function checkCapture(string $name): string
     {
-        $marker = CaptureMarker::for($name);
+        $route = Mailspoon::route($name);
 
-        MessageMatcher::for($name);
+        $marker = $route->marker();
+
+        // Constructing the matcher validates the filter rules.
+        $route->matcher();
 
         return 'mark: '.$marker->describe().($marker->mode === CaptureMarker::KEYWORD
             ? ' — the server must allow custom keywords (PERMANENTFLAGS \*)'
@@ -237,7 +239,7 @@ final class DoctorCommand extends Command
             return;
         }
 
-        $source = MailboxRoute::option($name, 'key') !== null ? "route:{$name}" : 'global';
+        $source = Mailspoon::route($name)->definesKey() ? "route:{$name}" : 'global';
 
         $this->line(sprintf(
             '  signature sample (key %s, timestamp=1700000000, token=test): %s',
@@ -251,7 +253,7 @@ final class DoctorCommand extends Command
      */
     private function endpointFor(string $name): ?string
     {
-        return MailboxRoute::option($name, 'endpoint') ?? config('mailspoon.endpoint');
+        return Mailspoon::route($name)->endpoint();
     }
 
     /**
@@ -259,7 +261,7 @@ final class DoctorCommand extends Command
      */
     private function keyFor(string $name): ?string
     {
-        return MailboxRoute::option($name, 'key') ?? config('mailspoon.key');
+        return Mailspoon::route($name)->key();
     }
 
     /**

@@ -16,8 +16,8 @@ use Random\RandomException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Throwable;
 use TTBooking\Mailspoon\Events\DeliveryPermanentlyFailed;
+use TTBooking\Mailspoon\Facades\Mailspoon;
 use TTBooking\Mailspoon\Models\RelayedMessage;
-use TTBooking\Mailspoon\Support\MailboxRoute;
 use TTBooking\Mailspoon\Support\MessageArchive;
 
 #[AsCommand(name: 'mailspoon:deliver')]
@@ -67,7 +67,6 @@ final class DeliverMessagesCommand extends Command
      */
     public function handle(
         MessageArchive $archive,
-        #[Config('mailspoon.key')] ?string $key,
         #[Config('mailspoon.delivery.max_attempts')] int $defaultMaxAttempts,
         #[Config('mailspoon.delivery.timeout')] int $timeout,
         #[Config('mailspoon.delivery.connect_timeout')] int $connectTimeout,
@@ -113,7 +112,7 @@ final class DeliverMessagesCommand extends Command
                 continue;
             }
 
-            $signingKey = $this->keyFor($message, $key);
+            $signingKey = $this->keyFor($message);
 
             if ($signingKey === null) {
                 $this->recordFailure($message, 0, 'Signing key is not configured (no route key and no global mailspoon.key).');
@@ -180,7 +179,7 @@ final class DeliverMessagesCommand extends Command
                 $message->status,
                 $message->attempts,
                 $message->endpoint,
-                $message->mailbox !== null && MailboxRoute::option($message->mailbox, 'key') !== null
+                $message->mailbox !== null && Mailspoon::route($message->mailbox)->definesKey()
                     ? "route:{$message->mailbox}"
                     : 'global',
                 match (true) {
@@ -208,13 +207,11 @@ final class DeliverMessagesCommand extends Command
      * key is only a fallback and may be unset when every mailbox has its own
      * route key.
      */
-    protected function keyFor(RelayedMessage $message, ?string $default): ?string
+    protected function keyFor(RelayedMessage $message): ?string
     {
-        if ($message->mailbox === null) {
-            return $default;
-        }
-
-        return MailboxRoute::option($message->mailbox, 'key') ?? $default;
+        return $message->mailbox === null
+            ? config('mailspoon.key')
+            : Mailspoon::route($message->mailbox)->key();
     }
 
     /**

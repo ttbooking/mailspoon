@@ -2,6 +2,7 @@
 
 use DirectoryTree\ImapEngine\Address;
 use DirectoryTree\ImapEngine\MessageInterface;
+use TTBooking\Mailspoon\Facades\Mailspoon;
 use TTBooking\Mailspoon\Support\MessageMatcher;
 use ZBateson\MailMimeParser\Header\IHeader;
 
@@ -97,6 +98,6 @@ it('prefers route filters over global ones', function () {
 
     $message = matchableMessage(subject: '⚡ go');
 
-    expect(MessageMatcher::for('operators')->passes($message))->toBeTrue()
-        ->and(MessageMatcher::for('other')->passes($message))->toBeFalse();
+    expect(Mailspoon::route('operators')->matcher()->passes($message))->toBeTrue()
+        ->and(Mailspoon::route('other')->matcher()->passes($message))->toBeFalse();
 });

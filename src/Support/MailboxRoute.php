@@ -4,35 +4,58 @@ declare(strict_types=1);
 
 namespace TTBooking\Mailspoon\Support;
 
+use TTBooking\Mailspoon\Contracts\Route;
+use TTBooking\Mailspoon\MailspoonManager;
+
 /**
- * Per-mailbox route configuration lookup.
+ * A mailbox route resolved from plain options arrays.
  *
- * Mailbox names may contain dots (`noreply@example.ru`), so route options
- * cannot be read with dot notation — `config("mailspoon.routes.{$name}.key")`
- * would treat the name as nested segments. Routes are indexed as plain
- * array keys instead.
+ * A pure value object built by {@see MailspoonManager}: `$options` are the
+ * route's own settings (config or a runtime registration); `$defaults` are the
+ * global fallbacks. Each accessor prefers the route's own value and falls back
+ * to the default. It reads no global state, so it can be tested with plain
+ * arrays — the manager owns the config reads.
  */
-final readonly class MailboxRoute
+final readonly class MailboxRoute implements Route
 {
     /**
-     * Read a route option for the mailbox, or null when not configured.
+     * @param  array<string, mixed>  $options  The route's own settings.
+     * @param  array<string, mixed>  $defaults  Global fallbacks: endpoint, key, mark, filters.
      */
-    public static function option(string $mailbox, string $option): mixed
-    {
-        $route = config('mailspoon.routes', [])[$mailbox] ?? null;
+    public function __construct(
+        private array $options = [],
+        private array $defaults = [],
+    ) {}
 
-        return is_array($route) ? $route[$option] ?? null : null;
+    public function endpoint(): ?string
+    {
+        return $this->options['endpoint'] ?? $this->defaults['endpoint'] ?? null;
     }
 
-    /**
-     * Whether the mailbox may be pulled, or is paused by its route.
-     *
-     * A mailbox is enabled unless its route explicitly sets `enabled` to
-     * false. This pauses capture (`mailspoon:pull`/`mailspoon:sentry`) only;
-     * already-stored messages are still delivered by `mailspoon:deliver`.
-     */
-    public static function enabled(string $mailbox): bool
+    public function key(): ?string
     {
-        return self::option($mailbox, 'enabled') !== false;
+        return $this->options['key'] ?? $this->defaults['key'] ?? null;
+    }
+
+    public function definesKey(): bool
+    {
+        return ($this->options['key'] ?? null) !== null;
+    }
+
+    public function enabled(): bool
+    {
+        return ($this->options['enabled'] ?? true) !== false;
+    }
+
+    public function marker(): CaptureMarker
+    {
+        return CaptureMarker::parse($this->options['mark'] ?? $this->defaults['mark'] ?? CaptureMarker::SEEN);
+    }
+
+    public function matcher(): MessageMatcher
+    {
+        $filters = $this->options['filters'] ?? $this->defaults['filters'] ?? [];
+
+        return new MessageMatcher($filters['allow'] ?? [], $filters['deny'] ?? []);
     }
 }

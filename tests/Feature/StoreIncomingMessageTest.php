@@ -25,8 +25,10 @@ function fakeIncomingMessage(string $id = '<id@mailspoon.test>', string $raw = '
 
 function makeStoreListener(?string $endpoint = 'https://hook.test/mime'): StoreIncomingMessage
 {
+    // The global endpoint is the route fallback, resolved from config.
+    config(['mailspoon.endpoint' => $endpoint]);
+
     return new StoreIncomingMessage(
-        endpoint: $endpoint,
         archive: new MessageArchive(disk: 'local', basePath: 'mailspoon'),
     );
 }

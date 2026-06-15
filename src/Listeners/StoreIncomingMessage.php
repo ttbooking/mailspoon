@@ -6,17 +6,15 @@ namespace TTBooking\Mailspoon\Listeners;
 
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
-use Illuminate\Container\Attributes\Config;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
+use TTBooking\Mailspoon\Contracts\Route;
 use TTBooking\Mailspoon\Events\MessageFiltered;
+use TTBooking\Mailspoon\Facades\Mailspoon;
 use TTBooking\Mailspoon\Models\RelayedMessage;
-use TTBooking\Mailspoon\Support\CaptureMarker;
-use TTBooking\Mailspoon\Support\MailboxRoute;
 use TTBooking\Mailspoon\Support\MessageArchive;
-use TTBooking\Mailspoon\Support\MessageMatcher;
 use UnexpectedValueException;
 
 /**
@@ -30,7 +28,6 @@ use UnexpectedValueException;
 final readonly class StoreIncomingMessage
 {
     public function __construct(
-        #[Config('mailspoon.endpoint')] protected ?string $endpoint,
         protected MessageArchive $archive,
     ) {}
 
@@ -56,14 +53,16 @@ final readonly class StoreIncomingMessage
         // (imapengine-laravel ^1.3 carries it on the event).
         $mailbox = $event->mailbox;
 
+        $route = Mailspoon::route($mailbox);
+
         // How this mailbox marks viewed messages: \Seen for robot mailboxes,
         // a custom keyword or nothing at all for mailboxes read by humans.
-        $marker = CaptureMarker::for($mailbox);
+        $marker = $route->marker();
 
         // A filtered message is still marked as viewed (it must not be picked
         // up again), but never reaches the journal, archive or endpoint. The
         // log line and event are its only trace.
-        if (! MessageMatcher::for($mailbox)->passes($message)) {
+        if (! $route->matcher()->passes($message)) {
             $marker->apply($message);
 
             Log::info("Mailspoon: message filtered out on mailbox [{$mailbox}].", [
@@ -102,7 +101,7 @@ final readonly class StoreIncomingMessage
             'account' => $account,
             'folder' => $folder,
             'target' => RelayedMessage::TARGET_DEFAULT,
-            'endpoint' => $this->endpointFor($mailbox),
+            'endpoint' => $this->endpointFor($route, $mailbox),
             'status' => RelayedMessage::STATUS_PENDING,
             'archive_path' => $this->archive->store($raw, $fingerprint, $receivedAt, $mailbox),
             'received_at' => $receivedAt,
@@ -119,9 +118,9 @@ final readonly class StoreIncomingMessage
      * route, it may be left unset. The message stays unmarked on failure, so
      * it is picked up again once the configuration is fixed.
      */
-    protected function endpointFor(string $mailbox): string
+    protected function endpointFor(Route $route, string $mailbox): string
     {
-        $endpoint = MailboxRoute::option($mailbox, 'endpoint') ?? $this->endpoint;
+        $endpoint = $route->endpoint();
 
         if ($endpoint === null) {
             throw new RuntimeException(

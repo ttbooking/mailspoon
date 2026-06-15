@@ -30,17 +30,6 @@ final readonly class MessageMatcher
     }
 
     /**
-     * Build the matcher for a mailbox: its route filters, or the global ones.
-     */
-    public static function for(string $mailbox): self
-    {
-        $filters = MailboxRoute::option($mailbox, 'filters')
-            ?? config('mailspoon.filters', []);
-
-        return new self($filters['allow'] ?? [], $filters['deny'] ?? []);
-    }
-
-    /**
      * Determine whether the message should be captured and relayed.
      */
     public function passes(MessageInterface $message): bool
