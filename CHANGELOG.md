@@ -7,6 +7,33 @@
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-06-15
+
+### Added
+
+- **Команды как сервисы** (фича #25): логика `mailspoon:doctor`/`:replay`/
+  `:deliver` вынесена в вызываемые сервисы со структурным результатом
+  (`Arrayable`+`JsonSerializable`), пригодным для `response()->json()` — чтобы
+  обслуживать динамические ящики (#24) из веб-слоя хоста, а не скрапить консоль:
+  - `Services\Doctor` → `Results\DoctorReport` (список `Check` с
+    `mailbox`/`name`/`status`/`message`); проверки складываются в отчёт, а не
+    бросаются на первой ошибке;
+  - `Services\Replay` (+ `Services\ReplayCriteria`) → `Results\ReplayResult`;
+    пустой критерий бросает `InvalidArgumentException` (хост мапит в 422);
+  - `Services\Deliverer` → `Results\DeliverySummary` (`delivered`/`failed`/
+    `total`); ретраи, бэкофф и событие `DeliveryPermanentlyFailed` — в сервисе.
+- README: раздел «Вызов операций из приложения» — примеры контроллеров,
+  рекомендация гонять сетевые сервисы через очередь, авторизация мутаций.
+
+### Changed
+
+- Команды `mailspoon:doctor`/`:replay`/`:deliver` стали тонкими адаптерами над
+  сервисами — CLI-поведение и вывод не изменились.
+- Пустой `--mailbox=` у `mailspoon:replay` теперь означает «без фильтра по
+  ящику», а не выборку по пустому имени.
+
+Пакет HTTP-слой не добавляет: контроллеры и UI строит хост.
+
 ## [3.6.0] - 2026-06-15
 
 ### Added
