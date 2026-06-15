@@ -4,16 +4,12 @@ declare(strict_types=1);
 
 namespace TTBooking\Mailspoon\Commands;
 
-use DirectoryTree\ImapEngine\Laravel\Facades\Imap;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Schema;
-use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
-use Throwable;
 use TTBooking\Mailspoon\Facades\Mailspoon;
-use TTBooking\Mailspoon\Support\CaptureMarker;
-use TTBooking\Mailspoon\Support\MessageArchive;
+use TTBooking\Mailspoon\Results\Check;
+use TTBooking\Mailspoon\Results\DoctorReport;
+use TTBooking\Mailspoon\Services\Doctor;
 
 #[AsCommand(name: 'mailspoon:doctor')]
 final class DoctorCommand extends Command
@@ -35,39 +31,15 @@ final class DoctorCommand extends Command
     protected $description = 'Check configuration, database, archive, IMAP connectivity and endpoints.';
 
     /**
-     * Whether any check has failed so far.
-     */
-    private bool $failed = false;
-
-    /**
      * Execute the console command.
      */
-    public function handle(MessageArchive $archive): int
+    public function handle(Doctor $doctor): int
     {
-        $names = $this->argument('mailbox') ?: array_keys(config('imap.mailboxes', []));
+        $report = $doctor->run($this->argument('mailbox') ?: [], (bool) $this->option('send'));
 
-        $this->line('General:');
-        $this->check('database: relayed_messages table', $this->checkDatabase(...));
-        $this->check('archive: disk is writable and throws errors', fn () => $this->checkArchive($archive));
+        $this->renderReport($report);
 
-        foreach ($names as $name) {
-            $this->newLine();
-            $this->line("Mailbox [{$name}]:");
-
-            $this->check('route: endpoint and signing key', fn () => $this->checkRoute($name));
-            $this->check('capture: mark and filters', fn () => $this->checkCapture($name));
-            $this->check('imap: connect and log in', fn () => $this->checkImap($name));
-            $this->check(
-                $this->option('send') ? 'endpoint: signed test message' : 'endpoint: reachable',
-                fn () => $this->checkEndpoint($name),
-            );
-
-            $this->signatureSample($name);
-        }
-
-        $this->newLine();
-
-        if ($this->failed) {
+        if (! $report->ok()) {
             $this->error('Some checks failed.');
 
             return self::FAILURE;
@@ -79,155 +51,81 @@ final class DoctorCommand extends Command
     }
 
     /**
-     * Run a single probe and report it as a check line.
+     * Render the report as grouped check lines with per-mailbox signature samples.
+     */
+    private function renderReport(DoctorReport $report): void
+    {
+        $this->line('General:');
+        foreach ($report->checks as $check) {
+            if ($check->mailbox === null) {
+                $this->renderCheck($check);
+            }
+        }
+
+        foreach ($this->mailboxes($report) as $mailbox) {
+            $this->newLine();
+            $this->line("Mailbox [{$mailbox}]:");
+
+            foreach ($report->checks as $check) {
+                if ($check->mailbox === $mailbox) {
+                    $this->renderCheck($check);
+                }
+            }
+
+            $this->signatureSample($mailbox);
+        }
+
+        $this->newLine();
+    }
+
+    /**
+     * Mailbox names present in the report, in order of first appearance.
      *
-     * @param  callable(): ?string  $probe
+     * @return list<string>
      */
-    private function check(string $label, callable $probe): void
+    private function mailboxes(DoctorReport $report): array
     {
-        try {
-            $detail = $probe();
+        $names = [];
 
-            $this->line("  <info>✓</info> {$label}".($detail ? " — {$detail}" : ''));
-        } catch (Throwable $e) {
-            $this->failed = true;
-
-            $this->line("  <error>✗</error> {$label} — {$e->getMessage()}");
+        foreach ($report->checks as $check) {
+            if ($check->mailbox !== null && ! in_array($check->mailbox, $names, true)) {
+                $names[] = $check->mailbox;
+            }
         }
+
+        return $names;
     }
 
     /**
-     * Ensure the journal table exists (migrations have run).
+     * Render one check as a ✓/✗ line.
      */
-    private function checkDatabase(): ?string
+    private function renderCheck(Check $check): void
     {
-        if (! Schema::hasTable('relayed_messages')) {
-            throw new RuntimeException('table is missing — run `php artisan migrate`');
+        $label = $this->label($check);
+
+        if ($check->passed()) {
+            $this->line("  <info>✓</info> {$label}".($check->message ? " — {$check->message}" : ''));
+
+            return;
         }
 
-        return null;
+        $this->line("  <error>✗</error> {$label} — {$check->message}");
     }
 
     /**
-     * Write, read back and delete a probe file on the archive disk.
-     *
-     * Also exercises the MessageArchive guard: a disk without
-     * `'throw' => true` fails here instead of at capture time.
+     * Human-readable label for a check.
      */
-    private function checkArchive(MessageArchive $archive): string
+    private function label(Check $check): string
     {
-        $path = $archive->store('mailspoon doctor probe', '<doctor-probe@mailspoon>', now(), '_doctor');
-
-        $raw = $archive->get($path);
-
-        $archive->delete($path);
-
-        if ($raw !== 'mailspoon doctor probe') {
-            throw new RuntimeException("probe file came back corrupted at [{$path}]");
-        }
-
-        return 'disk ['.config('mailspoon.archive.disk').']';
-    }
-
-    /**
-     * Ensure the mailbox resolves to a usable endpoint and signing key.
-     */
-    private function checkRoute(string $name): string
-    {
-        $endpoint = $this->endpointFor($name);
-
-        if (! $endpoint) {
-            throw new RuntimeException('endpoint is not configured (no route and no global mailspoon.endpoint)');
-        }
-
-        if (! filter_var($endpoint, FILTER_VALIDATE_URL) || ! str_starts_with($endpoint, 'http')) {
-            throw new RuntimeException("endpoint [{$endpoint}] is not a valid URL");
-        }
-
-        if (! $this->keyFor($name)) {
-            throw new RuntimeException('signing key is not configured (no route key and no global mailspoon.key)');
-        }
-
-        return $endpoint.(str_starts_with($endpoint, 'https://') ? '' : ' (not https!)');
-    }
-
-    /**
-     * Validate the capture marker and filter rules for the mailbox.
-     *
-     * Constructing the matcher rejects broken regular expressions and unknown
-     * fields, so a bad rule fails here instead of silently skipping mail.
-     */
-    private function checkCapture(string $name): string
-    {
-        $route = Mailspoon::route($name);
-
-        $marker = $route->marker();
-
-        // Constructing the matcher validates the filter rules.
-        $route->matcher();
-
-        return 'mark: '.$marker->describe().($marker->mode === CaptureMarker::KEYWORD
-            ? ' — the server must allow custom keywords (PERMANENTFLAGS \*)'
-            : '');
-    }
-
-    /**
-     * Actually connect and authenticate against the IMAP server.
-     */
-    private function checkImap(string $name): string
-    {
-        $mailbox = Imap::mailbox($name);
-
-        try {
-            $mailbox->connect();
-            $mailbox->inbox();
-
-            return 'connected as ['.$mailbox->config('username').']';
-        } finally {
-            $mailbox->disconnect();
-        }
-    }
-
-    /**
-     * Probe the endpoint: OPTIONS by default, a signed POST with --send.
-     *
-     * Without --send any HTTP response counts as reachable — the goal is to
-     * catch DNS/TLS/firewall problems without feeding test mail into the
-     * receiving application.
-     */
-    private function checkEndpoint(string $name): string
-    {
-        $endpoint = $this->endpointFor($name);
-
-        if (! $endpoint) {
-            throw new RuntimeException('cannot probe — no endpoint (see the route check)');
-        }
-
-        if (! $this->option('send')) {
-            $response = Http::timeout(10)->connectTimeout(5)->send('OPTIONS', $endpoint);
-
-            return "reachable (HTTP {$response->status()})";
-        }
-
-        if (! ($key = $this->keyFor($name))) {
-            throw new RuntimeException('cannot sign the test message — no signing key (see the route check)');
-        }
-
-        $timestamp = now()->getTimestamp();
-        $token = bin2hex(random_bytes(25));
-
-        $response = Http::asForm()->timeout(15)->connectTimeout(5)->post($endpoint, [
-            'body-mime' => $this->testMime($name),
-            'timestamp' => $timestamp,
-            'token' => $token,
-            'signature' => hash_hmac('sha256', $timestamp.$token, $key),
-        ]);
-
-        if (! $response->successful()) {
-            throw new RuntimeException("HTTP {$response->status()} — check the signing key and the receiving route");
-        }
-
-        return "accepted (HTTP {$response->status()})";
+        return match ($check->name) {
+            'database' => 'database: relayed_messages table',
+            'archive' => 'archive: disk is writable and throws errors',
+            'route' => 'route: endpoint and signing key',
+            'capture' => 'capture: mark and filters',
+            'imap' => 'imap: connect and log in',
+            'endpoint' => $this->option('send') ? 'endpoint: signed test message' : 'endpoint: reachable',
+            default => $check->name,
+        };
     }
 
     /**
@@ -235,48 +133,18 @@ final class DoctorCommand extends Command
      */
     private function signatureSample(string $name): void
     {
-        if (! ($key = $this->keyFor($name))) {
+        $route = Mailspoon::route($name);
+
+        if (! ($key = $route->key())) {
             return;
         }
 
-        $source = Mailspoon::route($name)->definesKey() ? "route:{$name}" : 'global';
+        $source = $route->definesKey() ? "route:{$name}" : 'global';
 
         $this->line(sprintf(
             '  signature sample (key %s, timestamp=1700000000, token=test): %s',
             $source,
             hash_hmac('sha256', '1700000000test', $key),
         ));
-    }
-
-    /**
-     * Resolve the endpoint for the mailbox route, or the global default.
-     */
-    private function endpointFor(string $name): ?string
-    {
-        return Mailspoon::route($name)->endpoint();
-    }
-
-    /**
-     * Resolve the signing key for the mailbox route, or the global default.
-     */
-    private function keyFor(string $name): ?string
-    {
-        return Mailspoon::route($name)->key();
-    }
-
-    /**
-     * Build a minimal, clearly marked test message.
-     */
-    private function testMime(string $name): string
-    {
-        return implode("\r\n", [
-            'From: mailspoon-doctor@localhost',
-            'To: '.$name.'@localhost',
-            'Subject: Mailspoon doctor test message',
-            'Message-Id: <doctor-'.bin2hex(random_bytes(8)).'@mailspoon>',
-            'X-Mailspoon-Doctor: true',
-            '',
-            'This is a connectivity test sent by `mailspoon:doctor --send`.',
-        ]);
     }
 }
