@@ -20,12 +20,13 @@ final readonly class DoctorReport implements Arrayable, JsonSerializable
     public function __construct(public array $checks) {}
 
     /**
-     * Whether every check passed.
+     * Whether the run is free of failures. Warnings do not flip this — they are
+     * advisory, so a report with only warnings is still ok (exit code 0).
      */
     public function ok(): bool
     {
         foreach ($this->checks as $check) {
-            if (! $check->passed()) {
+            if ($check->failed()) {
                 return false;
             }
         }
@@ -40,7 +41,17 @@ final readonly class DoctorReport implements Arrayable, JsonSerializable
      */
     public function failures(): array
     {
-        return array_values(array_filter($this->checks, fn (Check $check) => ! $check->passed()));
+        return array_values(array_filter($this->checks, fn (Check $check) => $check->failed()));
+    }
+
+    /**
+     * The warning checks only — advisory, not failures.
+     *
+     * @return list<Check>
+     */
+    public function warnings(): array
+    {
+        return array_values(array_filter($this->checks, fn (Check $check) => $check->status === CheckStatus::Warn));
     }
 
     /**

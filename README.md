@@ -542,6 +542,12 @@ Replay — явное действие оператора: дедупликац�
 (`MAILBOX_MAILGUN_KEY` у laravel-mailbox). Завершается ненулевым кодом при
 любой провальной проверке — удобно как preflight в деплое.
 
+Отдельная проверка `schedule` сообщает cron-расписание ящика. Её отсутствие —
+не ошибка (ящик может читаться `mailspoon:sentry` или ручным `mailspoon:pull`),
+поэтому это **предупреждение** (строка `!`), а не провал: код возврата остаётся
+нулевым, в JSON-отчёте статус проверки — `warn`. Паузнутый маршрут
+(`enabled => false`) проходит молча.
+
 ```bash
 php artisan mailspoon:doctor                  # все ящики из config/imap.php
 php artisan mailspoon:doctor support          # только указанные
