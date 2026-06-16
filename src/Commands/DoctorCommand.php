@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Symfony\Component\Console\Attribute\AsCommand;
 use TTBooking\Mailspoon\Facades\Mailspoon;
 use TTBooking\Mailspoon\Results\Check;
+use TTBooking\Mailspoon\Results\CheckStatus;
 use TTBooking\Mailspoon\Results\DoctorReport;
 use TTBooking\Mailspoon\Services\Doctor;
 
@@ -43,6 +44,12 @@ final class DoctorCommand extends Command
             $this->error('Some checks failed.');
 
             return self::FAILURE;
+        }
+
+        if ($warnings = $report->warnings()) {
+            $this->comment(count($warnings).' warning(s) — see the `!` lines above.');
+
+            return self::SUCCESS;
         }
 
         $this->info('All checks passed.');
@@ -102,14 +109,13 @@ final class DoctorCommand extends Command
     private function renderCheck(Check $check): void
     {
         $label = $this->label($check);
+        $suffix = $check->message ? " — {$check->message}" : '';
 
-        if ($check->passed()) {
-            $this->line("  <info>✓</info> {$label}".($check->message ? " — {$check->message}" : ''));
-
-            return;
-        }
-
-        $this->line("  <error>✗</error> {$label} — {$check->message}");
+        match ($check->status) {
+            CheckStatus::Ok => $this->line("  <info>✓</info> {$label}{$suffix}"),
+            CheckStatus::Warn => $this->line("  <comment>!</comment> {$label}{$suffix}"),
+            CheckStatus::Fail => $this->line("  <error>✗</error> {$label}{$suffix}"),
+        };
     }
 
     /**
@@ -122,6 +128,7 @@ final class DoctorCommand extends Command
             'archive' => 'archive: disk is writable and throws errors',
             'route' => 'route: endpoint and signing key',
             'capture' => 'capture: mark and filters',
+            'schedule' => 'schedule: cron-poll',
             'imap' => 'imap: connect and log in',
             'endpoint' => $this->option('send') ? 'endpoint: signed test message' : 'endpoint: reachable',
             default => $check->name,

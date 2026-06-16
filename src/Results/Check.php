@@ -30,6 +30,11 @@ final readonly class Check implements Arrayable, JsonSerializable
         return $this->status === CheckStatus::Ok;
     }
 
+    public function failed(): bool
+    {
+        return $this->status === CheckStatus::Fail;
+    }
+
     /**
      * @return array{mailbox: ?string, name: string, status: string, message: ?string}
      */

@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- `mailspoon:doctor`: новая проверка `schedule` — сообщает cron-расписание
+  ящика. Отсутствие расписания даёт **предупреждение** (статус `warn`, строка
+  `!`), а не провал: ящик может читаться `mailspoon:sentry` или ручным
+  `mailspoon:pull`. Паузнутый маршрут (`enabled => false`) проходит молча.
+- `Results\CheckStatus::Warn` и `Check::failed()`/`DoctorReport::warnings()` —
+  третья, не-провальная ступень результата.
+
+### Changed
+
+- `DoctorReport::ok()` теперь учитывает только провалы: прогон с одними
+  предупреждениями остаётся успешным (код возврата 0). В консоли итог —
+  «N warning(s)» вместо «All checks passed.».
+
 ## [3.7.0] - 2026-06-15
 
 ### Added

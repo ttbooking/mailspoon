@@ -14,6 +14,9 @@ beforeEach(function () {
     config([
         'mailspoon.endpoint' => 'https://hook.test/mime',
         'mailspoon.key' => 'secret-key',
+        // A cron-pull schedule so the baseline is fully clean; the schedule
+        // check warns when it is absent (see the dedicated tests below).
+        'mailspoon.schedule.pull' => ['default' => '*/5 * * * *'],
         'imap.mailboxes' => ['default' => ['host' => 'imap.test']],
     ]);
 });
@@ -67,6 +70,7 @@ it('resolves the route of a mailbox whose name contains dots', function () {
             ],
         ],
         'imap.mailboxes' => ['noreply@ttbooking.ru' => ['host' => 'imap.test']],
+        'mailspoon.schedule.pull' => ['noreply@ttbooking.ru' => '*/5 * * * *'],
     ]);
     Http::fake(['*' => Http::response('', 204)]);
     healthyImapMock('noreply@ttbooking.ru');
@@ -153,4 +157,30 @@ it('checks only the requested mailbox', function () {
     // The Imap facade mock only expects [secondary]; touching [default]
     // would fail the test.
     $this->artisan('mailspoon:doctor secondary')->assertSuccessful();
+});
+
+it('warns but still succeeds when no cron-pull schedule is configured', function () {
+    config(['mailspoon.schedule.pull' => []]);
+    Http::fake(['*' => Http::response('', 204)]);
+    healthyImapMock();
+
+    $this->artisan('mailspoon:doctor')
+        ->expectsOutputToContain('no cron-pull schedule')
+        ->expectsOutputToContain('1 warning(s)')
+        ->doesntExpectOutputToContain('All checks passed.')
+        ->assertSuccessful();
+});
+
+it('passes quietly when a paused mailbox has no schedule', function () {
+    config([
+        'mailspoon.schedule.pull' => [],
+        'mailspoon.routes.default.enabled' => false,
+    ]);
+    Http::fake(['*' => Http::response('', 204)]);
+    healthyImapMock();
+
+    $this->artisan('mailspoon:doctor')
+        ->expectsOutputToContain('All checks passed.')
+        ->doesntExpectOutputToContain('warning(s)')
+        ->assertSuccessful();
 });

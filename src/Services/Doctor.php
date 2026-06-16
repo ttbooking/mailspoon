@@ -45,6 +45,7 @@ final class Doctor
         foreach ($names as $name) {
             $checks[] = $this->probe($name, 'route', fn () => $this->checkRoute($name));
             $checks[] = $this->probe($name, 'capture', fn () => $this->checkCapture($name));
+            $checks[] = $this->checkSchedule($name);
             $checks[] = $this->probe($name, 'imap', fn () => $this->checkImap($name));
             $checks[] = $this->probe($name, 'endpoint', fn () => $this->checkEndpoint($name, $send));
         }
@@ -139,6 +140,32 @@ final class Doctor
         return 'mark: '.$marker->describe().($marker->mode === CaptureMarker::KEYWORD
             ? ' — the server must allow custom keywords (PERMANENTFLAGS \*)'
             : '');
+    }
+
+    /**
+     * Report the mailbox's cron-pull schedule.
+     *
+     * A missing schedule is not an error — the mailbox may be served by a
+     * long-lived `mailspoon:sentry` watcher or a manual `mailspoon:pull` — so
+     * it is a warning, not a failure. A paused route is not polled by design,
+     * so it passes quietly.
+     */
+    private function checkSchedule(string $name): Check
+    {
+        if (! Mailspoon::route($name)->enabled()) {
+            return new Check($name, 'schedule', CheckStatus::Ok, 'paused (enabled => false) — not pulled');
+        }
+
+        if ($cron = Mailspoon::schedules()[$name] ?? null) {
+            return new Check($name, 'schedule', CheckStatus::Ok, "cron-poll [{$cron}]");
+        }
+
+        return new Check(
+            $name,
+            'schedule',
+            CheckStatus::Warn,
+            'no cron-pull schedule — relying on `mailspoon:sentry` or a manual `mailspoon:pull`',
+        );
     }
 
     /**

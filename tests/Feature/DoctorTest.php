@@ -95,6 +95,62 @@ it('reports the resolved capture marker', function () {
         ->toContain('keyword [Mailspoon]');
 });
 
+it('warns when a mailbox has no cron-pull schedule, without failing the run', function () {
+    config(['mailspoon.schedule.pull' => []]);
+    Http::fake(['*' => Http::response('', 204)]);
+    doctorImapMock();
+
+    $report = app(Doctor::class)->run();
+
+    $schedule = checkFor($report, 'default', 'schedule');
+
+    expect($schedule->status)->toBe(CheckStatus::Warn)
+        ->and($schedule->message)->toContain('no cron-pull schedule')
+        // A warning is advisory: the run is still ok and has no failures.
+        ->and($report->ok())->toBeTrue()
+        ->and($report->failures())->toBe([])
+        ->and($report->warnings())->toContain($schedule);
+});
+
+it('passes the schedule check when a config schedule is set', function () {
+    config(['mailspoon.schedule.pull' => ['default' => '*/5 * * * *']]);
+    Http::fake(['*' => Http::response('', 204)]);
+    doctorImapMock();
+
+    $schedule = checkFor(app(Doctor::class)->run(), 'default', 'schedule');
+
+    expect($schedule->status)->toBe(CheckStatus::Ok)
+        ->and($schedule->message)->toContain('*/5 * * * *');
+});
+
+it('passes the schedule check when a route carries its own schedule', function () {
+    config([
+        'mailspoon.schedule.pull' => [],
+        'mailspoon.routes.default.schedule' => '*/10 * * * *',
+    ]);
+    Http::fake(['*' => Http::response('', 204)]);
+    doctorImapMock();
+
+    $schedule = checkFor(app(Doctor::class)->run(), 'default', 'schedule');
+
+    expect($schedule->status)->toBe(CheckStatus::Ok)
+        ->and($schedule->message)->toContain('*/10 * * * *');
+});
+
+it('passes the schedule check quietly for a paused mailbox', function () {
+    config([
+        'mailspoon.schedule.pull' => [],
+        'mailspoon.routes.default.enabled' => false,
+    ]);
+    Http::fake(['*' => Http::response('', 204)]);
+    doctorImapMock();
+
+    $schedule = checkFor(app(Doctor::class)->run(), 'default', 'schedule');
+
+    expect($schedule->status)->toBe(CheckStatus::Ok)
+        ->and($schedule->message)->toContain('paused');
+});
+
 it('checks only the requested mailbox', function () {
     config(['imap.mailboxes' => ['default' => [], 'secondary' => []]]);
     Http::fake(['*' => Http::response('', 204)]);
