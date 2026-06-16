@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [3.8.1] - 2026-06-16
+
 ### Changed
 
 - `mailspoon:doctor`: проверка `schedule` теперь оценивает расписание и у
