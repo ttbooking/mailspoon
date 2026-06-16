@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Сухой прогон фильтров** (фича #23): команда `mailspoon:filter-test` и сервис
+  `Services\FilterTester` со структурным результатом `Results\FilterTestResult`
+  (`passes`/`decision`/`field`/`pattern`/`reason`, `Arrayable`+`JsonSerializable`).
+  Прогоняет письмо через `filters` ящика **без захвата** (ни журнала, ни архива,
+  ни пометки, ни доставки) и сообщает, какое правило решило вердикт. Работает на
+  выключенном ящике (`enabled => false`) и зовётся из дашборда. Источник письма —
+  `--file` (сырой MIME, без IMAP) или `--uid` (из ящика).
+- `Support\MessageMatcher::deniedBy()`/`allowedBy()`/`hasAllowList()` — объясняют
+  вердикт (сработавшее поле/паттерн), не только bool; `passes()` поведения не меняет.
+
 ## [3.8.1] - 2026-06-16
 
 ### Changed

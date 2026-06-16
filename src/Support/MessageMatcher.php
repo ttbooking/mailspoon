@@ -34,57 +34,98 @@ final readonly class MessageMatcher
      */
     public function passes(MessageInterface $message): bool
     {
-        if ($this->matches($this->deny, $message)) {
-            return false;
-        }
-
-        return $this->allow === [] || $this->matches($this->allow, $message);
+        return $this->deniedBy($message) === null
+            && (! $this->hasAllowList() || $this->allowedBy($message) !== null);
     }
 
     /**
-     * Determine whether any rule of the given set matches the message.
+     * The first deny rule that matches the message, or null.
+     *
+     * Exposed so a dry-run (`mailspoon:filter-test`, a dashboard) can explain
+     * the verdict, not just return a boolean.
+     *
+     * @return array{field: string, pattern: string}|null
      */
-    private function matches(array $rules, MessageInterface $message): bool
+    public function deniedBy(MessageInterface $message): ?array
+    {
+        return $this->firstMatch($this->deny, $message);
+    }
+
+    /**
+     * The first allow rule that matches the message, or null.
+     *
+     * @return array{field: string, pattern: string}|null
+     */
+    public function allowedBy(MessageInterface $message): ?array
+    {
+        return $this->firstMatch($this->allow, $message);
+    }
+
+    /**
+     * Whether an allow list is configured at all; an empty one allows everything.
+     */
+    public function hasAllowList(): bool
+    {
+        return $this->allow !== [];
+    }
+
+    /**
+     * The first rule in the set that matches, as a `field`/`pattern` pair, or null.
+     *
+     * @return array{field: string, pattern: string}|null
+     */
+    private function firstMatch(array $rules, MessageInterface $message): ?array
     {
         foreach ($rules as $field => $patterns) {
-            $matched = match ($field) {
-                'from' => $this->matchesAny((array) $patterns, $message->from()?->email()),
-                'subject' => $this->matchesAny((array) $patterns, $message->subject()),
-                'header' => $this->matchesHeaders((array) $patterns, $message),
-                'has_attachment' => $message->hasAttachments() === (bool) $patterns,
+            $match = match ($field) {
+                'from' => $this->firstHit((array) $patterns, $message->from()?->email()),
+                'subject' => $this->firstHit((array) $patterns, $message->subject()),
+                'header' => $this->firstHeaderHit((array) $patterns, $message),
+                'has_attachment' => $message->hasAttachments() === (bool) $patterns
+                    ? ['field' => 'has_attachment', 'pattern' => ((bool) $patterns) ? 'true' : 'false']
+                    : null,
             };
 
-            if ($matched) {
-                return true;
+            if ($match === null) {
+                continue;
             }
+
+            // from/subject yield the bare matching pattern; header and
+            // has_attachment already carry a full descriptor.
+            return is_array($match) ? $match : ['field' => $field, 'pattern' => $match];
         }
 
-        return false;
+        return null;
     }
 
     /**
-     * Match `Header-Name => pattern` pairs against the message headers.
+     * The first `Header-Name => pattern` pair that matches, as a descriptor, or null.
+     *
+     * @return array{field: string, pattern: string}|null
      */
-    private function matchesHeaders(array $patterns, MessageInterface $message): bool
+    private function firstHeaderHit(array $patterns, MessageInterface $message): ?array
     {
         foreach ($patterns as $name => $pattern) {
             if ($this->matchesPattern($pattern, $message->header($name)?->getValue())) {
-                return true;
+                return ['field' => "header:{$name}", 'pattern' => $pattern];
             }
         }
 
-        return false;
+        return null;
     }
 
-    private function matchesAny(array $patterns, ?string $value): bool
+    /**
+     * The first pattern that matches the value, or null.
+     */
+    private function firstHit(array $patterns, ?string $value): ?string
     {
         foreach ($patterns as $pattern) {
             if ($this->matchesPattern($pattern, $value)) {
-                return true;
+                return $pattern;
             }
         }
 
-        return false;
+        return null;
     }
 
     private function matchesPattern(string $pattern, ?string $value): bool
