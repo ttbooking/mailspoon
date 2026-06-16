@@ -137,7 +137,9 @@ it('passes the schedule check when a route carries its own schedule', function (
         ->and($schedule->message)->toContain('*/10 * * * *');
 });
 
-it('passes the schedule check quietly for a paused mailbox', function () {
+it('warns about a paused mailbox that has no schedule, so setup gaps are not hidden', function () {
+    // Doctor is a preflight tool, often run while a mailbox is still paused
+    // during setup: a missing schedule must surface then, not stay hidden.
     config([
         'mailspoon.schedule.pull' => [],
         'mailspoon.routes.default.enabled' => false,
@@ -147,8 +149,24 @@ it('passes the schedule check quietly for a paused mailbox', function () {
 
     $schedule = checkFor(app(Doctor::class)->run(), 'default', 'schedule');
 
+    expect($schedule->status)->toBe(CheckStatus::Warn)
+        ->and($schedule->message)->toContain('paused')
+        ->and($schedule->message)->toContain('no cron-pull schedule');
+});
+
+it('passes a paused mailbox that does have a schedule, noting the pause', function () {
+    config([
+        'mailspoon.schedule.pull' => ['default' => '*/5 * * * *'],
+        'mailspoon.routes.default.enabled' => false,
+    ]);
+    Http::fake(['*' => Http::response('', 204)]);
+    doctorImapMock();
+
+    $schedule = checkFor(app(Doctor::class)->run(), 'default', 'schedule');
+
     expect($schedule->status)->toBe(CheckStatus::Ok)
-        ->and($schedule->message)->toContain('paused');
+        ->and($schedule->message)->toContain('paused')
+        ->and($schedule->message)->toContain('*/5 * * * *');
 });
 
 it('checks only the requested mailbox', function () {
