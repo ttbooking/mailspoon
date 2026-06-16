@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-06-16
+
 ### Added
 
 - `mailspoon:doctor`: новая проверка `schedule` — сообщает cron-расписание
