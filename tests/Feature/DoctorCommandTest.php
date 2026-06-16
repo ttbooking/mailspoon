@@ -171,7 +171,7 @@ it('warns but still succeeds when no cron-pull schedule is configured', function
         ->assertSuccessful();
 });
 
-it('passes quietly when a paused mailbox has no schedule', function () {
+it('warns about a paused mailbox with no schedule instead of passing quietly', function () {
     config([
         'mailspoon.schedule.pull' => [],
         'mailspoon.routes.default.enabled' => false,
@@ -180,7 +180,8 @@ it('passes quietly when a paused mailbox has no schedule', function () {
     healthyImapMock();
 
     $this->artisan('mailspoon:doctor')
-        ->expectsOutputToContain('All checks passed.')
-        ->doesntExpectOutputToContain('warning(s)')
+        ->expectsOutputToContain('paused (enabled => false) and no cron-pull schedule')
+        ->expectsOutputToContain('1 warning(s)')
+        ->doesntExpectOutputToContain('All checks passed.')
         ->assertSuccessful();
 });

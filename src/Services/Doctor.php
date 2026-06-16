@@ -147,25 +147,27 @@ final class Doctor
      *
      * A missing schedule is not an error — the mailbox may be served by a
      * long-lived `mailspoon:sentry` watcher or a manual `mailspoon:pull` — so
-     * it is a warning, not a failure. A paused route is not polled by design,
-     * so it passes quietly.
+     * it is a warning, not a failure. The schedule is reported even when the
+     * route is paused (`enabled => false`): doctor is a preflight tool, often
+     * run during setup while the mailbox is still off, so a half-configured
+     * mailbox must not hide its missing schedule behind the pause. A paused
+     * mailbox is not pulled in any mode (cron, manual and sentry all skip it),
+     * so its message says so rather than pointing at sentry/manual pull.
      */
     private function checkSchedule(string $name): Check
     {
-        if (! Mailspoon::route($name)->enabled()) {
-            return new Check($name, 'schedule', CheckStatus::Ok, 'paused (enabled => false) — not pulled');
+        $cron = Mailspoon::schedules()[$name] ?? null;
+        $paused = ! Mailspoon::route($name)->enabled();
+
+        if (! $cron) {
+            return new Check($name, 'schedule', CheckStatus::Warn, $paused
+                ? 'paused (enabled => false) and no cron-pull schedule — not pulled in any mode'
+                : 'no cron-pull schedule — relying on `mailspoon:sentry` or a manual `mailspoon:pull`');
         }
 
-        if ($cron = Mailspoon::schedules()[$name] ?? null) {
-            return new Check($name, 'schedule', CheckStatus::Ok, "cron-poll [{$cron}]");
-        }
-
-        return new Check(
-            $name,
-            'schedule',
-            CheckStatus::Warn,
-            'no cron-pull schedule — relying on `mailspoon:sentry` or a manual `mailspoon:pull`',
-        );
+        return new Check($name, 'schedule', CheckStatus::Ok, $paused
+            ? "paused (enabled => false) — cron-poll [{$cron}] resumes once enabled"
+            : "cron-poll [{$cron}]");
     }
 
     /**
