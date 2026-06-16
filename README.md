@@ -235,7 +235,8 @@ IDLE-наблюдение; а cron-poll из `schedule.pull` для этого �
 `deny` приоритетнее `allow`; пустой `allow` пропускает всё. Поля: `from`,
 `subject`, `header`, `has_attachment`. Кривое правило (битый регэксп,
 неизвестное поле) ловится на старте и в `mailspoon:doctor`, а не молча
-пропускает письма.
+пропускает письма. Проверить правила на конкретном письме до запуска чтения —
+[`mailspoon:filter-test`](#mailspoonfilter-test--сухой-прогон-фильтров).
 
 Каждое отфильтрованное письмо оставляет след: запись в логе Laravel и событие
 [`MessageFiltered`](#события) — слишком строгое `allow`-правило видно по логу,
@@ -560,6 +561,29 @@ php artisan mailspoon:doctor --send           # + подписанное тес�
 принимающее приложение); `--send` отправляет полноценное подписанное письмо с
 заголовком `X-Mailspoon-Doctor: true` и требует ответа 2xx.
 
+### `mailspoon:filter-test` — сухой прогон фильтров
+
+Прогоняет письмо через `filters` ящика **без захвата**: не ходит в журнал, не
+архивирует, не помечает письмо и ничего не доставляет. Печатает вердикт и
+**правило, которое его решило** — какой `deny` отбросил письмо или какой `allow`
+его пропустил. Удобно при настройке правил, до запуска чтения.
+
+```bash
+php artisan mailspoon:filter-test support --file=sample.eml   # сырой MIME из файла
+php artisan mailspoon:filter-test support --uid=42            # письмо по UID из ящика
+```
+
+```text
+✗ FILTERED — message would be dropped (denied by from rule [no-reply@*])
+```
+
+Работает и на **выключенном** ящике (`enabled => false`): вопрос «отфильтруется
+ли это письмо» одинаково валиден для маршрута, который ещё только настраивают.
+Команда — тонкая обёртка над сервисом `FilterTester` (см. ниже), так что тот же
+вердикт можно получить из дашборда. Матчер берётся живой — из конфига или
+рантайм-`Mailspoon::register()`, — поэтому результат точно совпадает с тем, что
+решит захват. `--file` ничего не требует от IMAP; `--uid` тянет письмо из ящика.
+
 ## Вызов операций из приложения (сервисы)
 
 За командами `mailspoon:doctor`/`:replay`/`:deliver` стоят сервисы, которые
@@ -572,10 +596,12 @@ Mailspoon HTTP-слой не шипит: контроллеры и UI строи
 для `response()->json()`.
 
 ```php
+use DirectoryTree\ImapEngine\FileMessage;
 use TTBooking\Mailspoon\Services\Doctor;
 use TTBooking\Mailspoon\Services\Replay;
 use TTBooking\Mailspoon\Services\ReplayCriteria;
 use TTBooking\Mailspoon\Services\Deliverer;
+use TTBooking\Mailspoon\Services\FilterTester;
 
 // Диагностика — DoctorReport со списком проверок (mailbox/name/status/message).
 $report = app(Doctor::class)->run(['support']);   // пусто = все ящики; ->run([], send: true) — с подписанным письмом
@@ -587,6 +613,12 @@ $result = app(Replay::class)->run(new ReplayCriteria(failed: true, mailbox: 'sup
 
 // Принудительный флаш — DeliverySummary { delivered, failed, total }.
 $summary = app(Deliverer::class)->run(limit: 50);
+
+// Сухой прогон фильтров — FilterTestResult { passes, decision, field, pattern, reason }.
+// Принимает любой MessageInterface; для загруженного .eml — FileMessage, без IMAP.
+$verdict = app(FilterTester::class)->test('support', new FileMessage($request->getContent()));
+return response()->json($verdict);                 // { "passes": false, "decision": "denied_by_rule", ... }
+// Работает и для выключенного ящика; малформленное правило бросает InvalidArgumentException.
 ```
 
 На что обратить внимание:
@@ -596,6 +628,8 @@ $summary = app(Deliverer::class)->run(limit: 50);
   не в реквест-цикле.
 - **`Replay` и `Deliverer` меняют данные** (сбрасывают/доставляют записи) —
   авторизацию таких действий обеспечивает хост.
+- **`FilterTester` ничего не делает** — чистая оценка без IMAP, БД и сети, без
+  побочных эффектов, — поэтому его безопасно звать прямо в реквест-цикле.
 
 ## События
 

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use TTBooking\Mailspoon\Commands\DeliverMessagesCommand;
 use TTBooking\Mailspoon\Commands\DoctorCommand;
+use TTBooking\Mailspoon\Commands\FilterTestCommand;
 use TTBooking\Mailspoon\Commands\ImapPullCommand;
 use TTBooking\Mailspoon\Commands\ImapSentryCommand;
 use TTBooking\Mailspoon\Commands\ReplayMessagesCommand;
@@ -57,6 +58,7 @@ final class MailspoonServiceProvider extends ServiceProvider
                 DeliverMessagesCommand::class,
                 ReplayMessagesCommand::class,
                 DoctorCommand::class,
+                FilterTestCommand::class,
             ]);
 
             $this->callAfterResolving(Schedule::class, $this->schedule(...));
