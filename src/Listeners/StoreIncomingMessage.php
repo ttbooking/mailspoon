@@ -7,7 +7,6 @@ namespace TTBooking\Mailspoon\Listeners;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
 use TTBooking\Mailspoon\Contracts\Route;
@@ -61,14 +60,10 @@ final readonly class StoreIncomingMessage
 
         // A filtered message is still marked as viewed (it must not be picked
         // up again), but never reaches the journal, archive or endpoint. The
-        // log line and event are its only trace.
+        // MessageFiltered event is its only trace — logged out of the box by
+        // LogFilteredMessage, or handled by the host's own subscriber.
         if (! $route->matcher()->passes($message)) {
             $marker->apply($message);
-
-            Log::info("Mailspoon: message filtered out on mailbox [{$mailbox}].", [
-                'mailbox' => $mailbox,
-                'message_id' => $messageId,
-            ]);
 
             Event::dispatch(new MessageFiltered($message, $mailbox));
 

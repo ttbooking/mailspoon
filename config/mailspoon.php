@@ -99,6 +99,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Filtered Message Logging
+    |--------------------------------------------------------------------------
+    |
+    | A filtered message leaves no other trace — it is never journaled,
+    | archived or delivered — so by default the package writes a Laravel log
+    | line for each one, giving zero-config visibility into an overly strict
+    | allow rule. The capture itself only announces the `MessageFiltered`
+    | event; this log is a default subscriber. Set to false to silence it and
+    | listen to the event yourself to apply your own logging policy.
+    |
+    */
+
+    'log_filtered' => (bool) env('MAILSPOON_LOG_FILTERED', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Pull
     |--------------------------------------------------------------------------
     |

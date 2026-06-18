@@ -14,7 +14,9 @@ use TTBooking\Mailspoon\Commands\FilterTestCommand;
 use TTBooking\Mailspoon\Commands\ImapPullCommand;
 use TTBooking\Mailspoon\Commands\ImapSentryCommand;
 use TTBooking\Mailspoon\Commands\ReplayMessagesCommand;
+use TTBooking\Mailspoon\Events\MessageFiltered;
 use TTBooking\Mailspoon\Facades\Mailspoon;
+use TTBooking\Mailspoon\Listeners\LogFilteredMessage;
 use TTBooking\Mailspoon\Listeners\StoreIncomingMessage;
 use TTBooking\Mailspoon\Models\RelayedMessage;
 
@@ -42,6 +44,14 @@ final class MailspoonServiceProvider extends ServiceProvider
 
         // Package listeners are not auto-discovered by the host application.
         Event::listen(MessageReceived::class, StoreIncomingMessage::class);
+
+        // Default filtered-message observability. A filtered message leaves no
+        // other trace, so the package logs it out of the box; set `log_filtered`
+        // to false and listen to MessageFiltered directly to apply your own
+        // logging policy. The captor only announces the event — it never logs.
+        if (config('mailspoon.log_filtered', true)) {
+            Event::listen(MessageFiltered::class, LogFilteredMessage::class);
+        }
 
         if ($this->app->runningInConsole()) {
             $this->publishes([
