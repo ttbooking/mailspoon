@@ -640,8 +640,10 @@ return response()->json($verdict);                 // { "passes": false, "decisi
 
 - **`TTBooking\Mailspoon\Events\MessageFiltered`** — письмо отклонено
   правилами `filters` (свойства: `message`, `mailbox`). Отфильтрованное письмо
-  помечается просмотренным, но не попадает ни в журнал, ни в архив — событие
-  и лог-запись (`info`) — его единственный след.
+  помечается просмотренным, но не попадает ни в журнал, ни в архив — событие —
+  его единственный след. По умолчанию пакет сам логирует его (`info`) дефолтным
+  слушателем `LogFilteredMessage`; `MAILSPOON_LOG_FILTERED=false` отключает лог,
+  оставляя логирование на усмотрение подписчика события.
 - **`TTBooking\Mailspoon\Events\DeliveryPermanentlyFailed`** — письмо
   исчерпало `MAILSPOON_MAX_ATTEMPTS` и больше не будет переотправляться
   (свойство: `message` — модель `RelayedMessage`). Запись остаётся в журнале
