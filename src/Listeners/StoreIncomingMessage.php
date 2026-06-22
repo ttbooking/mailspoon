@@ -87,7 +87,11 @@ final readonly class StoreIncomingMessage
 
         [$account, $folder] = $this->source($message);
 
-        $receivedAt = $message->date() ?? now();
+        // The Date: header carries the sender's offset (e.g. +03:00). Eloquent's
+        // datetime cast stores the wall-clock as-is and reads it back as the app
+        // timezone, so the offset must be normalised here or the moment shifts by
+        // exactly that offset. Mirror now()/created_at by storing in the app zone.
+        $receivedAt = ($message->date() ?? now())->setTimezone(config('app.timezone'));
 
         RelayedMessage::create([
             'fingerprint' => $fingerprint,

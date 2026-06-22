@@ -1,5 +1,6 @@
 <?php
 
+use Carbon\Carbon;
 use DirectoryTree\ImapEngine\Laravel\Events\MessageReceived;
 use DirectoryTree\ImapEngine\MessageInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -51,6 +52,28 @@ it('archives the raw message, records it as pending and marks it seen', function
 
     Storage::disk('local')->assertExists($record->archive_path);
     expect(Storage::disk('local')->get($record->archive_path))->toBe('RAW-MIME-BODY');
+});
+
+it('normalises the Date header offset so received_at is stored in the app timezone', function () {
+    Storage::fake('local');
+    config(['app.timezone' => 'UTC']);
+
+    // Date: ... +03:00 → the same moment is 07:34:03 UTC.
+    $message = Mockery::mock(MessageInterface::class);
+    $message->shouldReceive('date')->andReturn(Carbon::parse('Mon, 22 Jun 2026 10:34:03 +0300'));
+    $message->shouldReceive('messageId')->andReturn('<tz@mailspoon.test>');
+    $message->shouldReceive('__toString')->andReturn('RAW-MIME-BODY');
+    $message->shouldReceive('markSeen')->once();
+
+    makeStoreListener()->handle(new MessageReceived($message, 'default'));
+
+    $record = RelayedMessage::sole();
+
+    // The raw column value is the wall-clock that lands in the database: it must
+    // be the UTC moment, not the sender's local 10:34:03 with the offset dropped.
+    expect($record->getRawOriginal('received_at'))->toBe('2026-06-22 07:34:03')
+        // The archive path is derived from the same instant, so it stays UTC too.
+        ->and($record->archive_path)->toStartWith('mailspoon/default/2026/06/22/');
 });
 
 it('does not store the same message twice but still marks it seen', function () {
